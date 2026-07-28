@@ -1,0 +1,70 @@
+<!doctype html>
+<html lang="en" class="dark">
+  <head>
+    <meta charset="UTF-8" />
+    <meta
+      name="viewport"
+      content="width=device-width, initial-scale=1, viewport-fit=cover, maximum-scale=5"
+    />
+    <title>VitalSync — Recovery &amp; Readiness</title>
+    <meta
+      name="description"
+      content="Personal health, recovery and readiness dashboard. Track HRV, resting heart rate, sleep, workouts and daily habits."
+    />
+
+    <!-- Theme colour follows the active scheme so the iOS status bar blends in -->
+    <meta name="theme-color" media="(prefers-color-scheme: dark)" content="#0b0f14" />
+    <meta name="theme-color" media="(prefers-color-scheme: light)" content="#f6f7f9" />
+
+    <!-- iOS standalone / splash -->
+    <meta name="apple-mobile-web-app-capable" content="yes" />
+    <meta name="mobile-web-app-capable" content="yes" />
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+    <meta name="apple-mobile-web-app-title" content="VitalSync" />
+    <link rel="apple-touch-icon" href="./apple-touch-icon.png" />
+    <link rel="icon" type="image/svg+xml" href="./favicon.svg" />
+
+    <script>
+      // Unpacks the path that public/404.html encoded into the query string,
+      // so a hard refresh on a deep link (e.g. /vitalsync/trends) lands on the
+      // right route instead of the app root. Adapted from spa-github-pages (MIT).
+      (function () {
+        var search = window.location.search;
+        if (search.charAt(1) !== '/') return;
+        var decoded = search
+          .slice(1)
+          .split('&')
+          .map(function (part) {
+            return part.replace(/~and~/g, '&');
+          })
+          .join('?');
+        window.history.replaceState(
+          null,
+          null,
+          window.location.pathname.replace(/\/$/, '') + decoded + window.location.hash
+        );
+      })();
+    </script>
+
+    <script>
+      // Apply the saved theme before first paint to avoid a flash of the
+      // wrong scheme. Mirrors the logic in src/context/ThemeContext.jsx.
+      (function () {
+        try {
+          var saved = localStorage.getItem('vitalsync-theme');
+          var theme =
+            saved ||
+            (window.matchMedia('(prefers-color-scheme: light)').matches ? 'light' : 'dark');
+          document.documentElement.classList.toggle('dark', theme === 'dark');
+          document.documentElement.style.colorScheme = theme;
+        } catch (e) {
+          /* private mode — fall back to the dark default already on <html> */
+        }
+      })();
+    </script>
+  </head>
+  <body>
+    <div id="root"></div>
+    <script type="module" src="/src/main.jsx"></script>
+  </body>
+</html>

@@ -1,0 +1,48 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <title>VitalSync</title>
+    <script>
+      /**
+       * GitHub Pages has no server-side rewrite, so a hard refresh on
+       * /vitalsync/trends returns this 404 page. We encode the requested path
+       * into the query string and bounce to the app root; the matching snippet
+       * in index.html unpacks it and hands the real path to React Router.
+       *
+       * Adapted from rafgraph/spa-github-pages (MIT).
+       *
+       * pathSegmentsToKeep = 1 because the app is served from a project page
+       * (user.github.io/vitalsync/). Set it to 0 for a user/org or custom-domain
+       * site served from the root.
+       */
+      var pathSegmentsToKeep = 1;
+
+      var l = window.location;
+      l.replace(
+        l.protocol +
+          '//' +
+          l.hostname +
+          (l.port ? ':' + l.port : '') +
+          l.pathname
+            .split('/')
+            .slice(0, 1 + pathSegmentsToKeep)
+            .join('/') +
+          '/?/' +
+          l.pathname
+            .slice(1)
+            .split('/')
+            .slice(pathSegmentsToKeep)
+            .join('/')
+            .replace(/&/g, '~and~') +
+          (l.search ? '&' + l.search.slice(1).replace(/&/g, '~and~') : '') +
+          l.hash
+      );
+    </script>
+  </head>
+  <body>
+    <noscript>
+      VitalSync needs JavaScript enabled. <a href="/vitalsync/">Open the app</a>.
+    </noscript>
+  </body>
+</html>

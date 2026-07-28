@@ -1,0 +1,107 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+@layer base {
+  :root {
+    color-scheme: light;
+    --bg: #f6f7f9;
+    --bg-elevated: #ffffff;
+    --bg-sunken: #eceef2;
+    --border: #e2e5ea;
+    --text: #0d1117;
+    --text-muted: #5b6673;
+    --track: #e6e9ee;
+  }
+
+  .dark {
+    color-scheme: dark;
+    --bg: #0b0f14;
+    --bg-elevated: #111820;
+    --bg-sunken: #07090d;
+    --border: #1e2936;
+    --text: #e8eef5;
+    --text-muted: #8494a6;
+    --track: #1b2530;
+  }
+
+  html,
+  body,
+  #root {
+    height: 100%;
+  }
+
+  body {
+    @apply font-sans antialiased;
+    background: var(--bg);
+    color: var(--text);
+    /* Prevent iOS rubber-band revealing white behind the app shell */
+    overscroll-behavior-y: none;
+    -webkit-tap-highlight-color: transparent;
+  }
+
+  /* Respect the notch / home indicator when installed to the home screen */
+  .safe-top {
+    padding-top: max(env(safe-area-inset-top), 0.5rem);
+  }
+  .safe-bottom {
+    padding-bottom: max(env(safe-area-inset-bottom), 0.5rem);
+  }
+
+  input,
+  select,
+  textarea {
+    /* iOS zooms the viewport on focus for anything under 16px */
+    font-size: 16px;
+  }
+
+  ::-webkit-scrollbar {
+    width: 8px;
+    height: 8px;
+  }
+  ::-webkit-scrollbar-thumb {
+    background: var(--border);
+    border-radius: 999px;
+  }
+}
+
+@layer components {
+  .surface {
+    background: var(--bg-elevated);
+    border: 1px solid var(--border);
+  }
+
+  .muted {
+    color: var(--text-muted);
+  }
+
+  .skeleton {
+    background: linear-gradient(
+      90deg,
+      var(--bg-sunken) 25%,
+      var(--border) 50%,
+      var(--bg-sunken) 75%
+    );
+    background-size: 500px 100%;
+    @apply animate-shimmer rounded-lg;
+  }
+
+  /* Hide scrollbar on horizontal chip rows while keeping it scrollable */
+  .no-scrollbar::-webkit-scrollbar {
+    display: none;
+  }
+  .no-scrollbar {
+    -ms-overflow-style: none;
+    scrollbar-width: none;
+  }
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
