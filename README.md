@@ -9,6 +9,23 @@ screen on iOS and Android.
 
 ---
 
+## This deployment
+
+| | |
+|---|---|
+| **Live app** | https://singhavinash2915.github.io/vitalsync/ |
+| **Repo** | https://github.com/singhavinash2915/vitalsync |
+| **Supabase project** | `vbyhumvshwsvbjtpwrmx` — https://vbyhumvshwsvbjtpwrmx.supabase.co |
+| **Sync endpoint** | `https://vbyhumvshwsvbjtpwrmx.supabase.co/functions/v1/health-sync` |
+
+Already done: schema + RLS migrated, `health-sync` Edge Function deployed, GitHub Actions secrets
+set, Pages building from `main`. Push to `main` and it redeploys.
+
+The generic setup instructions below are kept for rebuilding from scratch or pointing at a
+different project.
+
+---
+
 ## Table of contents
 
 1. [What it does](#what-it-does)
@@ -122,7 +139,7 @@ result stays on a true 0–100 scale.
 ## Quick start
 
 ```bash
-git clone <your-repo-url> vitalsync
+git clone https://github.com/singhavinash2915/vitalsync.git
 cd vitalsync
 npm install
 cp .env.example .env.local   # then fill in your Supabase values
@@ -181,9 +198,14 @@ supabase db push
 single-user personal app you probably want:
 
 - **Authentication → Providers → Email → Confirm email: off** — lets you sign in immediately
-- **Authentication → URL Configuration → Site URL** — set to your deployed URL
-  (e.g. `https://<username>.github.io/vitalsync/`) so magic links and password resets come back
-  to the right place. Add `http://localhost:5173` to **Redirect URLs** for local development.
+- **Authentication → URL Configuration → Site URL** — set to
+  `https://singhavinash2915.github.io/vitalsync/` so magic links and password resets come back to
+  the right place. Add `http://localhost:5173` to **Redirect URLs** for local development.
+
+> These two are the only steps not already applied to this project — they're auth settings, so
+> flip them yourself at
+> [the auth settings page](https://supabase.com/dashboard/project/vbyhumvshwsvbjtpwrmx/auth/providers).
+> Email/password sign-up works without them; only magic links and password resets need the Site URL.
 
 **4. Deploy the sync function** (only if you want Apple Watch sync):
 
@@ -220,10 +242,10 @@ home screen doesn't change that. Only native apps get HealthKit access.
 So the data gets **pushed in** instead. Both routes below POST to the same endpoint:
 
 ```
-https://<your-project>.supabase.co/functions/v1/health-sync
+https://vbyhumvshwsvbjtpwrmx.supabase.co/functions/v1/health-sync
 ```
 
-Find your exact URL and auth token in **Settings → Apple Watch sync** inside the app.
+The app shows this URL and your auth token in **Settings → Apple Watch sync**.
 
 ### Option A — Health Auto Export (paid app, fully automatic)
 
@@ -313,6 +335,11 @@ the algorithm lives in exactly one place, in JavaScript.
 
 ## Deploying to GitHub Pages
 
+> Already set up for this repo — steps 1–4 are done, and pushing to `main` redeploys. Note that
+> **Pages requires a public repo** unless you're on GitHub Pro or Team; that's why this one is
+> public. Your health data isn't affected: it lives in Supabase behind row-level security, and the
+> anon key in the bundle is designed to be public.
+
 **1. Push to GitHub.** The repo name matters: `vite.config.js` defaults `base` to `/vitalsync/`.
 The workflow overrides it with your actual repo name, so any name works — but if you build locally
 for a differently-named repo, set `BASE_PATH=/your-repo-name/`.
@@ -326,11 +353,15 @@ secret:
 **3. Turn on Pages.** Settings → Pages → **Source: GitHub Actions**.
 
 **4. Push to `main`.** [`.github/workflows/deploy.yml`](.github/workflows/deploy.yml) installs,
-lints, builds and publishes `dist/`. Your app lands at
-`https://<username>.github.io/<repo>/`.
+lints, builds and publishes `dist/` — here, to
+https://singhavinash2915.github.io/vitalsync/.
 
 **5. Update Supabase URLs.** Authentication → URL Configuration → set **Site URL** to your Pages
 URL, or magic links will redirect to the wrong origin.
+
+> Order matters: add the secrets **before** the first push. Vite inlines env vars at build time, so
+> a build that runs without them produces a bundle that shows the setup screen. If that happens,
+> add the secrets and re-run the workflow (Actions → Deploy to GitHub Pages → Run workflow).
 
 ### The 404 redirect
 
