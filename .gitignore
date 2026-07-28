@@ -13,3 +13,7 @@ dev-dist
 npm-debug.log*
 yarn-error.log*
 supabase/.temp
+
+# Stray backups of env files
+*.bak
+.env.local.*
