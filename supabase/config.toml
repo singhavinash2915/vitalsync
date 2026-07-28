@@ -1,0 +1,9 @@
+project_id = "vbyhumvshwsvbjtpwrmx"
+
+[functions.health-sync]
+# The gateway's default JWT check rejects any request without an Authorization
+# header — including the X-Sync-Key requests this endpoint exists to serve.
+# Turning it off does NOT make the function public: it authenticates every
+# caller itself, either by looking the sync key up against its SHA-256 hash or
+# by validating a Supabase access token. Requests with neither get a 401.
+verify_jwt = false

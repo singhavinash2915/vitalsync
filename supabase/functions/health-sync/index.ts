@@ -3,23 +3,29 @@
  *
  * Ingests Apple Watch / HealthKit data pushed from an iPhone.
  *
- * Two body shapes are accepted:
+ * ── Authentication ──────────────────────────────────────────────────────────
+ * Two options, in order of preference for automation:
  *
- *  1. Flat — what an iOS Shortcut is easiest to build against:
- *     { "date": "2026-07-28", "hrv": 62.4, "resting_hr": 51, "steps": 9231,
- *       "active_calories": 540, "spo2": 97, "body_temp": 36.6,
- *       "sleep_hours": 7.4, "sleep_quality": 4 }
+ *   1. Sync key (recommended, never expires):
+ *        X-Sync-Key: vsk_xxxxxxxxxxxx
+ *      Mint one in the app under Settings → Apple Watch sync. Stored hashed;
+ *      revoke by deleting it in the app.
  *
- *  2. Health Auto Export — its native "metrics" envelope:
- *     { "data": { "metrics": [ { "name": "heart_rate_variability",
- *                                "units": "ms",
- *                                "data": [ { "date": "...", "qty": 62.4 } ] } ] } }
+ *   2. Supabase access token (expires in ~1 hour — fine for a manual test):
+ *        Authorization: Bearer <access_token>
  *
- * Authentication: send the user's Supabase access token as
- *   Authorization: Bearer <token>
- * The row is written for whoever that token belongs to — the function never
- * accepts a user_id from the body, so a leaked token cannot write to another
+ * Either way the row is written for whoever the credential belongs to. A
+ * user_id in the body is ignored, so a leaked key cannot write to another
  * account.
+ *
+ * ── Body ────────────────────────────────────────────────────────────────────
+ * Accepts Health Auto Export's native envelope:
+ *   { "data": { "metrics": [...], "workouts": [...] } }
+ * or a flat shape an iOS Shortcut can build by hand:
+ *   { "date": "2026-07-28", "hrv": 62.4, "resting_hr": 51, ... }
+ *
+ * ── Admin ───────────────────────────────────────────────────────────────────
+ *   POST ?action=create-key   (Bearer token required) → mints a new sync key
  *
  * Deploy:  supabase functions deploy health-sync
  * Logs:    supabase functions logs health-sync
@@ -29,7 +35,8 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2.58.0';
 
 const CORS_HEADERS = {
   'Access-Control-Allow-Origin': '*',
-  'Access-Control-Allow-Headers': 'authorization, x-client-info, apikey, content-type',
+  'Access-Control-Allow-Headers':
+    'authorization, x-client-info, apikey, content-type, x-sync-key',
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
@@ -39,42 +46,48 @@ const json = (body: unknown, status = 200) =>
     headers: { ...CORS_HEADERS, 'Content-Type': 'application/json' },
   });
 
-/** Maps the many names Apple/HAE use for a metric onto our columns. */
+// ---------------------------------------------------------------------------
+// Metric normalisation — mirrors src/lib/healthImport.js
+// ---------------------------------------------------------------------------
+
 const METRIC_ALIASES: Record<string, string> = {
-  // HRV
   hrv: 'hrv',
   heart_rate_variability: 'hrv',
   heart_rate_variability_sdnn: 'hrv',
   hrv_sdnn: 'hrv',
-  // Resting heart rate
+  sdnn: 'hrv',
+
   resting_hr: 'resting_hr',
   resting_heart_rate: 'resting_hr',
   restingheartrate: 'resting_hr',
-  // Blood oxygen
+  rhr: 'resting_hr',
+
   spo2: 'spo2',
   blood_oxygen_saturation: 'spo2',
   oxygen_saturation: 'spo2',
-  // Temperature
+
   body_temp: 'body_temp',
   body_temperature: 'body_temp',
   apple_sleeping_wrist_temperature: 'body_temp',
+  sleeping_wrist_temperature: 'body_temp',
   wrist_temperature: 'body_temp',
-  // Energy
+
   active_calories: 'active_calories',
   active_energy: 'active_calories',
   active_energy_burned: 'active_calories',
-  // Steps
+
   steps: 'steps',
   step_count: 'steps',
-  // Sleep
+
   sleep_hours: 'sleep_hours',
   sleep_analysis: 'sleep_hours',
+  sleep_duration: 'sleep_hours',
   asleep: 'sleep_hours',
   total_sleep: 'sleep_hours',
+  time_asleep: 'sleep_hours',
   sleep_quality: 'sleep_quality',
 };
 
-/** Column → [min, max]. Anything outside is dropped rather than stored. */
 const RANGES: Record<string, [number, number]> = {
   hrv: [1, 400],
   resting_hr: [25, 150],
@@ -87,127 +100,305 @@ const RANGES: Record<string, [number, number]> = {
 };
 
 const INTEGER_COLUMNS = new Set(['resting_hr', 'active_calories', 'steps', 'sleep_quality']);
+const KJ_PER_KCAL = 4.184;
 
 const normaliseKey = (key: string) =>
   key.trim().toLowerCase().replace(/[\s-]+/g, '_').replace(/[^a-z0-9_]/g, '');
 
 const toDateKey = (value: unknown): string | null => {
+  if (typeof value === 'number') return new Date(value).toISOString().slice(0, 10);
   if (typeof value !== 'string' || !value) return null;
-  // Accepts "2026-07-28", "2026-07-28 07:00:00 +0530" and full ISO strings.
-  const match = value.match(/^(\d{4}-\d{2}-\d{2})/);
-  if (match) return match[1];
+  const direct = value.match(/^(\d{4}-\d{2}-\d{2})/);
+  if (direct) return direct[1];
   const parsed = new Date(value);
   return Number.isNaN(parsed.getTime()) ? null : parsed.toISOString().slice(0, 10);
 };
 
-/** Clamps a value into its allowed range, returning null when unusable. */
+/**
+ * Health Auto Export reports energy in kilojoules when the phone's locale uses
+ * kJ. 2708 kJ and 2708 kcal both look plausible to a range check, but storing
+ * the former as the latter overstates active calories by 4.2× and pegs the
+ * exertion score at 100 every day. Convert from the declared units.
+ */
+function convertUnits(column: string, value: number, units?: string): number {
+  if (!Number.isFinite(value)) return value;
+  const unit = String(units ?? '').trim().toLowerCase();
+
+  if (column === 'active_calories') {
+    if (unit === 'kj' || unit === 'kilojoules') return value / KJ_PER_KCAL;
+    if (unit === 'j' || unit === 'joules') return value / (KJ_PER_KCAL * 1000);
+    if (unit === 'cal') return value / 1000;
+    return value;
+  }
+  if (column === 'body_temp') {
+    if (unit.includes('f') || value > 45) return ((value - 32) * 5) / 9;
+    return value;
+  }
+  return value;
+}
+
+function normaliseSleep(value: number, units?: string): number | null {
+  if (!Number.isFinite(value)) return null;
+  const unit = String(units ?? '').toLowerCase();
+  if (unit.startsWith('min')) return value / 60;
+  if (unit.startsWith('s') && !unit.startsWith('sl')) return value / 3600;
+  if (unit.startsWith('h')) return value;
+  if (value > 1000) return value / 3600;
+  if (value > 24) return value / 60;
+  return value;
+}
+
 function coerce(column: string, raw: unknown): number | null {
   const value = typeof raw === 'string' ? Number(raw) : (raw as number);
   if (typeof value !== 'number' || !Number.isFinite(value)) return null;
-
   const range = RANGES[column];
   if (range && (value < range[0] || value > range[1])) return null;
-
   return INTEGER_COLUMNS.has(column) ? Math.round(value) : Math.round(value * 100) / 100;
 }
 
-/** Flattens the Health Auto Export envelope into { column: value } per date. */
-function parseHealthAutoExport(body: any): Map<string, Record<string, number>> {
-  const byDate = new Map<string, Record<string, number>>();
-  const metrics = body?.data?.metrics;
-  if (!Array.isArray(metrics)) return byDate;
+// --- workouts ---------------------------------------------------------------
 
-  for (const metric of metrics) {
+const WORKOUT_TYPES: Array<[RegExp, string]> = [
+  [/hiit|high intensity|interval/, 'hiit'],
+  [/strength|weight|functional training/, 'strength'],
+  [/swim/, 'swim'],
+  [/cycl|bik/, 'cycle'],
+  [/run|jog/, 'run'],
+  [/walk|hik/, 'walk'],
+  [/yoga|pilates|flexib|mind|cooldown|barre|stretch/, 'yoga'],
+  [/cricket|soccer|football|basketball|tennis|badminton|squash|golf|volleyball|hockey/, 'sport'],
+];
+
+const mapWorkoutType = (name: unknown) => {
+  const lower = String(name ?? '').toLowerCase();
+  for (const [pattern, type] of WORKOUT_TYPES) if (pattern.test(lower)) return type;
+  return 'other';
+};
+
+const qty = (node: any) => (node && typeof node === 'object' ? Number(node.qty) : Number(node));
+const unitsOf = (node: any) => (node && typeof node === 'object' ? node.units : undefined);
+
+/** Apple's `intensity` is kcal/hr·kg, numerically a MET value. */
+const metsToIntensity = (mets: number) =>
+  !Number.isFinite(mets) || mets <= 0 ? 5 : Math.min(10, Math.max(1, Math.round(mets)));
+
+function parseWorkouts(list: any[], userId: string) {
+  const rows: Record<string, unknown>[] = [];
+  for (const w of list ?? []) {
+    const date = toDateKey(w?.start ?? w?.date ?? w?.end);
+    if (!date) continue;
+
+    const seconds = Number(w?.duration);
+    const minutes = Number.isFinite(seconds) ? Math.round(seconds / 60) : null;
+    if (!minutes || minutes < 1 || minutes > 1440) continue;
+
+    const energyNode = w?.activeEnergyBurned ?? w?.totalEnergy;
+    const kcal = convertUnits('active_calories', qty(energyNode), unitsOf(energyNode));
+
+    rows.push({
+      user_id: userId,
+      date,
+      type: mapWorkoutType(w?.name),
+      duration_mins: minutes,
+      intensity: metsToIntensity(qty(w?.intensity)),
+      calories_burned: Number.isFinite(kcal) ? Math.round(kcal) : null,
+      notes: [
+        w?.name,
+        Number.isFinite(qty(w?.avgHeartRate)) ? `avg HR ${Math.round(qty(w.avgHeartRate))}` : null,
+      ]
+        .filter(Boolean)
+        .join(' · '),
+      external_id: w?.id ?? null,
+      source: 'health-sync',
+    });
+  }
+  return rows.filter((r) => r.external_id); // dedupe needs a stable id
+}
+
+// --- daily metrics ----------------------------------------------------------
+
+type Bucket = Record<string, number>;
+
+function addValue(byDate: Map<string, Bucket>, counts: Map<string, Bucket>, date: string, column: string, value: number) {
+  const bucket = byDate.get(date) ?? {};
+  const count = counts.get(date) ?? {};
+  if (bucket[column] === undefined) {
+    bucket[column] = value;
+    count[column] = 1;
+  } else {
+    const n = count[column] + 1;
+    bucket[column] = Math.round(((bucket[column] * count[column] + value) / n) * 100) / 100;
+    count[column] = n;
+  }
+  byDate.set(date, bucket);
+  counts.set(date, count);
+}
+
+function parseMetrics(metrics: any[]) {
+  const byDate = new Map<string, Bucket>();
+  const counts = new Map<string, Bucket>();
+
+  for (const metric of metrics ?? []) {
     const column = METRIC_ALIASES[normaliseKey(String(metric?.name ?? ''))];
     if (!column) continue;
+    const units = metric?.units;
 
     for (const point of metric?.data ?? []) {
-      const dateKey = toDateKey(point?.date);
-      if (!dateKey) continue;
+      const date = toDateKey(point?.date ?? point?.startDate);
+      if (!date) continue;
 
-      // HAE reports sleep in hours under different keys depending on version.
-      let raw = point?.qty ?? point?.Avg ?? point?.avg ?? point?.value;
+      let raw = point?.qty ?? point?.Avg ?? point?.avg ?? point?.value ?? point?.total;
       if (column === 'sleep_hours' && raw === undefined) {
         raw = point?.asleep ?? point?.totalSleep ?? point?.inBed;
       }
 
-      const value = coerce(column, raw);
-      if (value === null) continue;
+      let value = typeof raw === 'string' ? Number(raw) : raw;
+      value = column === 'sleep_hours' ? normaliseSleep(value, units) : convertUnits(column, value, units);
 
-      const bucket = byDate.get(dateKey) ?? {};
-      // Several samples can land on one day — average them rather than
-      // letting the last one win.
-      bucket[column] =
-        bucket[column] === undefined ? value : Math.round(((bucket[column] + value) / 2) * 100) / 100;
-      byDate.set(dateKey, bucket);
+      const clean = coerce(column, value);
+      if (clean !== null) addValue(byDate, counts, date, column, clean);
     }
   }
-
   return byDate;
 }
 
-/** Reads the flat Shortcut-friendly shape. */
-function parseFlat(body: any): Map<string, Record<string, number>> {
-  const byDate = new Map<string, Record<string, number>>();
-  const dateKey = toDateKey(body?.date) ?? new Date().toISOString().slice(0, 10);
-  const bucket: Record<string, number> = {};
+function parseFlat(body: any) {
+  const byDate = new Map<string, Bucket>();
+  const date = toDateKey(body?.date) ?? new Date().toISOString().slice(0, 10);
+  const bucket: Bucket = {};
 
   for (const [key, raw] of Object.entries(body ?? {})) {
     const column = METRIC_ALIASES[normaliseKey(key)];
     if (!column) continue;
-    const value = coerce(column, raw);
-    if (value !== null) bucket[column] = value;
+    let value = typeof raw === 'string' ? Number(raw) : (raw as number);
+    value = column === 'sleep_hours' ? (normaliseSleep(value, body?.units) as number) : convertUnits(column, value, body?.units);
+    const clean = coerce(column, value);
+    if (clean !== null) bucket[column] = clean;
   }
 
-  if (Object.keys(bucket).length) byDate.set(dateKey, bucket);
+  if (Object.keys(bucket).length) byDate.set(date, bucket);
   return byDate;
 }
+
+// ---------------------------------------------------------------------------
+// Handler
+// ---------------------------------------------------------------------------
+
+const sha256 = async (text: string) => {
+  const digest = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(text));
+  return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
+};
 
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed. Use POST.' }, 405);
 
-  const authHeader = req.headers.get('Authorization') ?? '';
-  if (!authHeader.startsWith('Bearer ')) {
-    return json({ error: 'Missing Authorization: Bearer <access_token> header.' }, 401);
-  }
-
   const supabaseUrl = Deno.env.get('SUPABASE_URL');
   const anonKey = Deno.env.get('SUPABASE_ANON_KEY');
+  const serviceKey = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY');
   if (!supabaseUrl || !anonKey) {
     return json({ error: 'Function is missing SUPABASE_URL / SUPABASE_ANON_KEY.' }, 500);
   }
 
-  // Forwarding the caller's JWT means every write runs as that user and RLS
-  // still applies — the function has no elevated privileges.
-  const supabase = createClient(supabaseUrl, anonKey, {
-    global: { headers: { Authorization: authHeader } },
-    auth: { persistSession: false, autoRefreshToken: false },
-  });
+  const authHeader = req.headers.get('Authorization') ?? '';
+  const syncKey = req.headers.get('X-Sync-Key') ?? '';
+  const url = new URL(req.url);
 
-  const {
-    data: { user },
-    error: authError,
-  } = await supabase.auth.getUser();
+  let userId: string | null = null;
+  let db;
 
-  if (authError || !user) {
-    return json({ error: 'Invalid or expired token.', detail: authError?.message }, 401);
+  if (syncKey) {
+    // Sync-key path: look the key up with the service role, then act as that
+    // user. Requires the service-role secret, which Supabase injects by default.
+    if (!serviceKey) {
+      return json({ error: 'Sync keys need SUPABASE_SERVICE_ROLE_KEY to be available.' }, 500);
+    }
+    const admin = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const { data: keyRow, error } = await admin
+      .from('sync_keys')
+      .select('id, user_id')
+      .eq('key_hash', await sha256(syncKey))
+      .maybeSingle();
+
+    if (error) return json({ error: 'Could not verify sync key.', detail: error.message }, 500);
+    if (!keyRow) return json({ error: 'Unknown or revoked sync key.' }, 401);
+
+    userId = keyRow.user_id;
+    db = admin;
+
+    // Fire-and-forget usage stamp; a failure here must not fail the sync.
+    admin
+      .from('sync_keys')
+      .update({ last_used_at: new Date().toISOString(), use_count: (keyRow as any).use_count ?? 0 })
+      .eq('id', keyRow.id)
+      .then(() => {});
+  } else if (authHeader.startsWith('Bearer ')) {
+    const client = createClient(supabaseUrl, anonKey, {
+      global: { headers: { Authorization: authHeader } },
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+    const {
+      data: { user },
+      error,
+    } = await client.auth.getUser();
+
+    if (error || !user) return json({ error: 'Invalid or expired token.', detail: error?.message }, 401);
+    userId = user.id;
+    db = client;
+  } else {
+    return json(
+      {
+        error: 'Missing credentials.',
+        hint: 'Send X-Sync-Key: <key> (recommended) or Authorization: Bearer <access_token>.',
+      },
+      401
+    );
   }
 
-  let body: unknown;
+  // --- mint a new sync key -------------------------------------------------
+  if (url.searchParams.get('action') === 'create-key') {
+    if (syncKey) return json({ error: 'Create a key while signed in, not with another key.' }, 403);
+    if (!serviceKey) return json({ error: 'Missing SUPABASE_SERVICE_ROLE_KEY.' }, 500);
+
+    const raw = `vsk_${crypto.randomUUID().replace(/-/g, '')}${crypto.randomUUID().replace(/-/g, '').slice(0, 12)}`;
+    const admin = createClient(supabaseUrl, serviceKey, {
+      auth: { persistSession: false, autoRefreshToken: false },
+    });
+
+    const { error } = await admin.from('sync_keys').insert({
+      user_id: userId,
+      key_hash: await sha256(raw),
+      key_prefix: raw.slice(0, 12),
+      label: 'Apple Health sync',
+    });
+
+    if (error) return json({ error: 'Could not create sync key.', detail: error.message }, 500);
+    // The only time the plaintext ever leaves this function.
+    return json({ ok: true, key: raw });
+  }
+
+  // --- ingest --------------------------------------------------------------
+  let body: any;
   try {
     body = await req.json();
   } catch {
     return json({ error: 'Body must be valid JSON.' }, 400);
   }
 
-  const parsed = (body as any)?.data?.metrics ? parseHealthAutoExport(body) : parseFlat(body);
+  const envelope = body?.data ?? body;
+  const hasEnvelope = Array.isArray(envelope?.metrics) || Array.isArray(envelope?.workouts);
 
-  if (!parsed.size) {
+  const byDate = hasEnvelope ? parseMetrics(envelope.metrics ?? []) : parseFlat(body);
+  const workoutRows = hasEnvelope ? parseWorkouts(envelope.workouts ?? [], userId!) : [];
+
+  if (!byDate.size && !workoutRows.length) {
     return json(
       {
         error: 'No recognised metrics found.',
-        hint: 'Send { "date": "YYYY-MM-DD", "hrv": 60, "resting_hr": 52, ... } or a Health Auto Export payload.',
+        hint: 'Send { "date": "YYYY-MM-DD", "hrv": 60, ... } or a Health Auto Export payload.',
         recognised: [...new Set(Object.values(METRIC_ALIASES))],
       },
       422
@@ -217,15 +408,14 @@ Deno.serve(async (req: Request) => {
   const healthRows: Record<string, unknown>[] = [];
   const sleepRows: Record<string, unknown>[] = [];
 
-  for (const [date, values] of parsed) {
+  for (const [date, values] of byDate) {
     const { sleep_hours, sleep_quality, ...health } = values;
-
     if (Object.keys(health).length) {
-      healthRows.push({ user_id: user.id, date, source: 'health-sync', ...health });
+      healthRows.push({ user_id: userId, date, source: 'health-sync', ...health });
     }
     if (sleep_hours !== undefined || sleep_quality !== undefined) {
       sleepRows.push({
-        user_id: user.id,
+        user_id: userId,
         date,
         source: 'health-sync',
         ...(sleep_hours !== undefined ? { duration_hours: sleep_hours } : {}),
@@ -234,26 +424,30 @@ Deno.serve(async (req: Request) => {
     }
   }
 
-  const results: Record<string, unknown> = { dates: [...parsed.keys()] };
+  const results: Record<string, unknown> = { dates: [...byDate.keys()].sort() };
 
   if (healthRows.length) {
-    const { error } = await supabase
-      .from('health_logs')
-      .upsert(healthRows, { onConflict: 'user_id,date' });
+    const { error } = await db.from('health_logs').upsert(healthRows, { onConflict: 'user_id,date' });
     if (error) return json({ error: 'Failed to write health_logs.', detail: error.message }, 500);
     results.health_logs = healthRows.length;
   }
 
   if (sleepRows.length) {
-    const { error } = await supabase
-      .from('sleep_logs')
-      .upsert(sleepRows, { onConflict: 'user_id,date' });
+    const { error } = await db.from('sleep_logs').upsert(sleepRows, { onConflict: 'user_id,date' });
     if (error) return json({ error: 'Failed to write sleep_logs.', detail: error.message }, 500);
     results.sleep_logs = sleepRows.length;
   }
 
-  // Scores are intentionally NOT computed here. Recovery depends on a 7-day
-  // rolling baseline that the app already has in memory, and it recalculates
-  // on next open — keeping one implementation of the algorithm, in JS.
-  return json({ ok: true, user: user.id, ...results });
+  if (workoutRows.length) {
+    const { error } = await db
+      .from('workout_logs')
+      .upsert(workoutRows, { onConflict: 'user_id,external_id' });
+    if (error) return json({ error: 'Failed to write workout_logs.', detail: error.message }, 500);
+    results.workout_logs = workoutRows.length;
+  }
+
+  // Scores are not computed here: recovery depends on a 7-day rolling baseline
+  // the app already holds in memory, and it recalculates on next open — so the
+  // algorithm lives in exactly one place.
+  return json({ ok: true, user: userId, ...results });
 });

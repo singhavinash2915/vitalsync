@@ -242,6 +242,93 @@ export const useDataStore = create((set, get) => ({
   },
 
   /**
+   * Bulk-writes a parsed Apple Health export, then rebuilds every score.
+   *
+   * Rows are chunked because a year of history is ~365 rows per table and
+   * PostgREST gets unhappy with very large single payloads. Existing days are
+   * merged rather than replaced: an import carrying only HRV must not wipe the
+   * sleep quality you rated by hand on the same day.
+   */
+  importHealthExport: async ({ userId, days, workouts = [], profile, onProgress }) => {
+    set({ saving: true, error: null });
+
+    const state = get();
+    const healthRows = [];
+    const sleepRows = [];
+
+    for (const day of days) {
+      if (day.health) {
+        const existing = state.health.find((r) => r.date === day.date);
+        healthRows.push({
+          ...(existing ?? {}),
+          user_id: userId,
+          date: day.date,
+          ...day.health,
+          source: 'import',
+        });
+      }
+      if (day.sleep) {
+        const existing = state.sleep.find((r) => r.date === day.date);
+        sleepRows.push({
+          ...(existing ?? {}),
+          user_id: userId,
+          date: day.date,
+          ...day.sleep,
+          source: 'import',
+        });
+      }
+    }
+
+    const CHUNK = 200;
+    const writeChunks = async (table, rows) => {
+      for (let i = 0; i < rows.length; i += CHUNK) {
+        const { error } = await supabase
+          .from(table)
+          .upsert(rows.slice(i, i + CHUNK), { onConflict: 'user_id,date' });
+        if (error) throw error;
+        onProgress?.(Math.min(i + CHUNK, rows.length), rows.length, table);
+      }
+    };
+
+    // Only workouts carrying Apple's stable UUID can be deduplicated; without
+    // one, a second import would silently double the session.
+    const workoutRows = workouts
+      .filter((w) => w.external_id)
+      .map((w) => ({ ...w, user_id: userId, source: 'import' }));
+
+    try {
+      await writeChunks('health_logs', healthRows);
+      await writeChunks('sleep_logs', sleepRows);
+
+      for (let i = 0; i < workoutRows.length; i += CHUNK) {
+        const { error } = await supabase
+          .from('workout_logs')
+          .upsert(workoutRows.slice(i, i + CHUNK), { onConflict: 'user_id,external_id' });
+        if (error) throw error;
+        onProgress?.(Math.min(i + CHUNK, workoutRows.length), workoutRows.length, 'workout_logs');
+      }
+
+      // Re-read rather than patching local state by hand: the server owns
+      // generated ids and timestamps, and the score rebuild below needs the
+      // full history in order to compute rolling baselines correctly.
+      await get().loadAll(userId, { silent: true });
+      await get().recomputeAll(userId, profile);
+
+      set({ saving: false });
+      return {
+        ok: true,
+        health: healthRows.length,
+        sleep: sleepRows.length,
+        workouts: workoutRows.length,
+      };
+    } catch (error) {
+      const message = describeError(error, 'Could not import that file.');
+      set({ saving: false, error: message });
+      return { ok: false, message };
+    }
+  },
+
+  /**
    * Rebuilds every score in the window. Used after the calorie target changes
    * (which shifts exertion, and therefore readiness, for every day).
    */

@@ -50,7 +50,7 @@ different project.
 | **Sleep** | Bedtime/wake time with auto-calculated duration, quality rating, 14-night bar chart |
 | **Journal** | Habit toggles (alcohol, travel, meditation), stress and diet ratings, notes — with a live readout of the net effect on your recovery score |
 | **Trends** | Seven interactive charts over 7 / 30 / 90 days: recovery, HRV, resting HR, sleep, exertion-vs-recovery, readiness, steps & calories |
-| **Settings** | Profile, calorie target, theme, Apple Watch sync credentials, JSON/CSV export |
+| **Settings** | Profile, calorie target, theme, Apple Health import, sync keys, JSON/CSV export |
 
 Everything works offline once loaded — the service worker serves the app shell from cache and
 falls back to your last-synced data.
@@ -187,6 +187,9 @@ the free tier is more than enough for one person.
 - a trigger that creates a profile row whenever someone signs up
 - **row-level security on all six tables**, with every policy pinned to `auth.uid()`
 
+[`0002_sync_keys_and_workout_dedupe.sql`](supabase/migrations/0002_sync_keys_and_workout_dedupe.sql)
+then adds long-lived sync keys and a unique index that makes re-importing an export idempotent.
+
 With the CLI instead:
 
 ```bash
@@ -210,10 +213,15 @@ single-user personal app you probably want:
 **4. Deploy the sync function** (only if you want Apple Watch sync):
 
 ```bash
-supabase functions deploy health-sync
+supabase functions deploy health-sync --no-verify-jwt
 ```
 
-`SUPABASE_URL` and `SUPABASE_ANON_KEY` are injected automatically — no extra secrets needed.
+`--no-verify-jwt` is required: the gateway's default JWT check rejects any request without an
+`Authorization` header, including the `X-Sync-Key` requests this endpoint exists to serve. It does
+**not** make the function public — it authenticates every caller itself and 401s otherwise.
+
+`SUPABASE_URL`, `SUPABASE_ANON_KEY` and `SUPABASE_SERVICE_ROLE_KEY` are injected automatically —
+no extra secrets needed.
 
 **5. Sign up** in the app and complete onboarding. That's it.
 
@@ -239,39 +247,60 @@ any time from **Settings → Rebuild all scores**.
 HealthKit off-limits to web apps — there is no browser API for it, and installing VitalSync to your
 home screen doesn't change that. Only native apps get HealthKit access.
 
-So the data gets **pushed in** instead. Both routes below POST to the same endpoint:
+So the data gets **pushed in**. Three ways, from most to least automatic:
+
+| | Effort | Runs by itself? |
+|---|---|---|
+| [Health Auto Export → REST API](#option-a--health-auto-export-fully-automatic) | 5 min setup, paid app | ✅ Yes — hourly or daily |
+| [iOS Shortcut automation](#option-b--ios-shortcut-free) | 20 min setup, free | ✅ Yes — daily at a set time |
+| [Manual file import](#option-c--manual-file-import) | Per export | ❌ No |
+
+All three hit the same endpoint:
 
 ```
 https://vbyhumvshwsvbjtpwrmx.supabase.co/functions/v1/health-sync
 ```
 
-The app shows this URL and your auth token in **Settings → Apple Watch sync**.
+### Get a sync key first
 
-### Option A — Health Auto Export (paid app, fully automatic)
+Automation needs a credential that doesn't expire. In the app: **Settings → Apple Watch sync →
+Create sync key**. You get something like `vsk_a1b2c3…`, shown **once**.
+
+Send it as a header on every request:
+
+```
+X-Sync-Key: vsk_a1b2c3...
+```
+
+Why not the session token? Supabase access tokens expire in about an hour. They're fine for a
+one-off `curl` test and useless for a 7am automation. Sync keys never expire, are stored only as a
+SHA-256 hash, and can be revoked in the app at any time. The endpoint still accepts
+`Authorization: Bearer <access_token>` if you prefer.
+
+### Option A — Health Auto Export (fully automatic)
 
 The most reliable route. [Health Auto Export](https://apps.apple.com/app/health-auto-export-json-csv/id1115567069)
 reads HealthKit in the background and posts on a schedule.
 
 1. Install the app and grant it Health read access.
 2. **Automations → Add Automation → REST API**.
-3. **URL:** your `/health-sync` endpoint from Settings.
+3. **URL:** the endpoint above.
 4. **Method:** POST · **Format:** JSON · **Aggregation:** Daily.
-5. **Headers:** add `Authorization` with the value `Bearer <your-token>` (copy the token from
-   Settings → Apple Watch sync → Reveal).
+5. **Headers:** add `X-Sync-Key` with your key as the value.
 6. **Metrics:** Heart Rate Variability, Resting Heart Rate, Step Count, Active Energy, Sleep
-   Analysis, Blood Oxygen Saturation, Apple Sleeping Wrist Temperature.
-7. **Frequency:** hourly, or daily at ~7am.
+   Analysis, and — if your watch records them — Blood Oxygen and Apple Sleeping Wrist Temperature.
+7. **Include workouts:** on. They land in your workout log automatically.
+8. **Frequency:** hourly, or daily at ~7am.
 
-The Edge Function understands Health Auto Export's native `{ data: { metrics: [...] } }` envelope
-and normalises its metric names automatically.
+That's it. The endpoint understands Health Auto Export's native envelope, including its `workouts`
+array, and upserts on date — so overlapping exports never duplicate anything.
 
-### Option B — iOS Shortcut (free, runs on a schedule)
+### Option B — iOS Shortcut (free)
 
-1. Open **Shortcuts → Automation → New → Time of Day → 7:00 am → Run Immediately**.
-2. Add **Find Health Samples** actions for each metric you want. For each one: set the type, sort
-   by *Start Date* descending, limit to 1, then **Get Details of Health Sample → Value**. Store
-   each into a variable.
-3. Add **Text** and build the JSON body:
+1. **Shortcuts → Automation → New → Time of Day → 7:00 am → Run Immediately**.
+2. Add **Find Health Samples** actions for each metric. For each: set the type, sort by *Start Date*
+   descending, limit to 1, then **Get Details of Health Sample → Value**, and save to a variable.
+3. Add a **Text** action containing the JSON body:
 
 ```json
 {
@@ -279,53 +308,48 @@ and normalises its metric names automatically.
   "hrv": 62.4,
   "resting_hr": 51,
   "spo2": 97,
-  "body_temp": 36.6,
   "active_calories": 540,
   "steps": 9231,
-  "sleep_hours": 7.4,
-  "sleep_quality": 4
+  "sleep_hours": 7.4
 }
 ```
 
-   Drop your variables in place of the numbers. Omit any field you don't collect — every key is
-   optional, and `date` defaults to today.
+   Substitute your variables for the numbers. Every field is optional and `date` defaults to today.
 
-4. Add **Get Contents of URL**:
-   - **URL:** your `/health-sync` endpoint
-   - **Method:** POST
-   - **Headers:** `Authorization` = `Bearer <your-token>`, `Content-Type` = `application/json`
-   - **Request Body:** File → the Text action from step 3
+4. Add **Get Contents of URL**: method POST, headers `X-Sync-Key: <your key>` and
+   `Content-Type: application/json`, request body = the Text action.
+5. Run it once by hand and check you get `{"ok": true, ...}` back.
 
-5. Run it once manually to check you get `{"ok": true, ...}` back.
+### Option C — manual file import
+
+For backfilling history in one go, this beats both automations — no token, no endpoint.
+
+1. In Health Auto Export, export a date range as JSON and share it to Files (or AirDrop it).
+2. Open VitalSync → **Settings → Apple Watch sync → Import health JSON**.
+3. Choose the file (or paste the contents). You'll see a preview — days, date range, metrics found,
+   workouts, and anything ignored — before anything is written.
+4. Import. Scores rebuild automatically.
+
+Re-importing the same file is safe: daily rows upsert on date, and workouts deduplicate on Apple's
+own workout UUID.
 
 ### What the endpoint accepts
 
-Field names are matched loosely, so `heart_rate_variability`, `hrv_sdnn` and `hrv` all work.
-Values outside physiological ranges are dropped rather than stored. Health metrics go to
-`health_logs`; `sleep_hours` and `sleep_quality` are routed to `sleep_logs`. Everything upserts on
-`(user_id, date)`, so re-sending the same day is safe.
+Field names are matched loosely — `heart_rate_variability`, `hrv_sdnn` and `hrv` all work — and
+values outside physiological ranges are dropped rather than stored, because one bad reading poisons
+a 7-day rolling baseline for a week.
 
-Responses:
+**Units are read from the payload, not assumed.** This matters more than it sounds: Health Auto
+Export reports energy in **kilojoules** on a lot of devices, and 2708 kJ vs 2708 kcal both look
+plausible to a range check. Storing kJ as kcal would overstate active calories by 4.2× and peg your
+exertion score at 100 every single day. Energy is converted from kJ, sleep from minutes or seconds,
+and temperature from Fahrenheit, all based on the declared units.
 
-| Status | Meaning |
+| Response | Meaning |
 |---|---|
-| `200` | `{ ok: true, health_logs: 1, sleep_logs: 1, dates: [...] }` |
-| `401` | Missing or expired `Authorization` header |
+| `200` | `{ ok: true, health_logs: 31, sleep_logs: 2, workout_logs: 4, dates: [...] }` |
+| `401` | Missing, unknown or revoked credential |
 | `422` | No recognised metrics — the response lists every accepted field name |
-
-### About the token
-
-The token in Settings is your Supabase **access token**, and it expires (one hour by default).
-That's fine for a manual test but will break an unattended daily automation.
-
-For a long-lived setup, either:
-
-- **Raise the JWT expiry** — Supabase Dashboard → Authentication → Sessions → *Access token (JWT)
-  expiry*. Setting it to a week keeps a personal automation running with occasional re-pasting.
-- **Or exchange a refresh token in the Shortcut** — POST to
-  `https://<project>.supabase.co/auth/v1/token?grant_type=refresh_token` with
-  `{"refresh_token": "<yours>"}` and an `apikey` header, then use the `access_token` from the
-  response for the sync call.
 
 Scores are deliberately **not** computed by the Edge Function. Recovery depends on a 7-day rolling
 baseline the app already holds in memory, and it recalculates the moment you open VitalSync — so
@@ -416,6 +440,7 @@ vitalsync/
 │   │   ├── supabase.js             Client + human-readable error mapping
 │   │   ├── scores.js               ★ All four score algorithms
 │   │   ├── insights.js             Insight generation, weekly stats, PRs
+│   │   ├── healthImport.js         Apple Health export parser (units, workouts)
 │   │   └── dates.js                Day-key helpers (yyyy-MM-dd, local time)
 │   ├── store/
 │   │   ├── useAuthStore.js         Session + profile (Zustand)
@@ -426,12 +451,14 @@ vitalsync/
 │   │   ├── ScoreRing.jsx           Animated SVG rings + linear bars
 │   │   ├── ChartTooltip.jsx        Shared Recharts tooltip
 │   │   ├── InsightsPanel.jsx       Insights, weekly summary, records
+│   │   ├── ImportHealthModal.jsx   Paste/upload an export, preview, bulk import
 │   │   ├── BottomNav.jsx           Tab bar (rail on desktop)
 │   │   └── Layout.jsx              Header, error banner, online status
 │   └── pages/                      Login, Onboarding, Dashboard, LogHealth,
 │                                   Workouts, Sleep, Journal, Trends, Settings
 └── supabase/
-    ├── migrations/0001_init.sql    Schema + RLS
+    ├── config.toml                 verify_jwt = false for health-sync
+    ├── migrations/                  Schema + RLS, then sync keys
     └── functions/health-sync/      Apple Watch ingestion Edge Function
 ```
 
@@ -492,8 +519,17 @@ the repo name automatically; if you built locally, pass `BASE_PATH=/your-repo/`.
 **404 on refresh** — `public/404.html` didn't make it into `dist/`, or `pathSegmentsToKeep` is
 wrong for your hosting setup. See [the 404 redirect](#the-404-redirect).
 
-**Sync returns 401** — your access token expired. Reveal a fresh one in Settings, or raise the JWT
-expiry / use the refresh-token flow described [above](#about-the-token).
+**Sync returns 401** — if you're using a session token, it expired; switch to a sync key
+(Settings → Apple Watch sync → Create sync key), which never does. If you're already using a key,
+it may have been revoked — create a new one.
+
+**Active calories look ~4× too high** — the export is in kilojoules and something isn't converting.
+VitalSync reads the `units` field and divides by 4.184 for kJ; if a custom exporter omits units,
+convert before sending.
+
+**Sleep score is 0 despite wearing the watch** — Apple only records sleep if Sleep Focus / sleep
+tracking is enabled in the Watch app *and* you wear it overnight. Short daytime entries are naps,
+not nights. You can always log sleep by hand on the Sleep tab.
 
 **Sync returns 422** — none of your field names were recognised. The response body lists every
 accepted name.

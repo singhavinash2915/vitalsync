@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import {
   User,
   Watch,
@@ -13,14 +13,17 @@ import {
   EyeOff,
   Save,
   Smartphone,
+  Upload,
+  KeyRound,
+  Trash2,
 } from 'lucide-react';
 
 import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
-import { functionsBaseUrl, supabase } from '../lib/supabase';
+import { functionsBaseUrl, supabase, describeError } from '../lib/supabase';
 import { useTheme } from '../context/ThemeContext';
 import { DEFAULT_CALORIE_TARGET } from '../lib/scores';
-import { todayKey } from '../lib/dates';
+import { todayKey, relativeDay } from '../lib/dates';
 import {
   Card,
   CardHeader,
@@ -33,6 +36,7 @@ import {
   Segmented,
   Badge,
 } from '../components/ui';
+import ImportHealthModal from '../components/ImportHealthModal';
 
 const GOALS = [
   { value: 'performance', label: 'Athletic performance' },
@@ -106,6 +110,65 @@ export default function Settings() {
   const [status, setStatus] = useState({ tone: null, message: '' });
   const [busy, setBusy] = useState(false);
   const [token, setToken] = useState('');
+  const [importOpen, setImportOpen] = useState(false);
+  const [syncKeys, setSyncKeys] = useState([]);
+  const [newKey, setNewKey] = useState('');
+  const [keyBusy, setKeyBusy] = useState(false);
+
+  const loadSyncKeys = useCallback(async () => {
+    const { data, error } = await supabase
+      .from('sync_keys')
+      .select('id, key_prefix, label, last_used_at, created_at')
+      .order('created_at', { ascending: false });
+    if (!error) setSyncKeys(data ?? []);
+  }, []);
+
+  useEffect(() => {
+    if (user?.id) loadSyncKeys();
+  }, [user?.id, loadSyncKeys]);
+
+  /**
+   * Keys are minted by the Edge Function, not the browser: it holds the
+   * service-role secret needed to write a hash the client never sees, and it
+   * returns the plaintext exactly once.
+   */
+  const createSyncKey = async () => {
+    setKeyBusy(true);
+    setStatus({ tone: null, message: '' });
+    try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('Your session has expired — sign in again.');
+
+      const response = await fetch(`${functionsBaseUrl}/health-sync?action=create-key`, {
+        method: 'POST',
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          'Content-Type': 'application/json',
+        },
+        body: '{}',
+      });
+      const payload = await response.json();
+      if (!response.ok) throw new Error(payload.detail || payload.error || 'Could not create key.');
+
+      setNewKey(payload.key);
+      await loadSyncKeys();
+    } catch (error) {
+      setStatus({ tone: 'error', message: describeError(error, 'Could not create a sync key.') });
+    } finally {
+      setKeyBusy(false);
+    }
+  };
+
+  const revokeKey = async (id) => {
+    const { error } = await supabase.from('sync_keys').delete().eq('id', id);
+    if (error) {
+      setStatus({ tone: 'error', message: describeError(error) });
+      return;
+    }
+    setNewKey('');
+    await loadSyncKeys();
+  };
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -320,39 +383,111 @@ export default function Settings() {
         />
         <CardBody className="space-y-3">
           <Alert tone="info">
-            iOS does not let a web app read Apple Health directly. Instead, the{' '}
-            <strong>Health Auto Export</strong> app or a free <strong>iOS Shortcut</strong> POSTs
-            your metrics to the endpoint below on a schedule.
+            iOS does not let a web app read Apple Health directly. Either import an export by hand,
+            or have the <strong>Health Auto Export</strong> app or a free <strong>iOS Shortcut</strong>{' '}
+            POST to the endpoint below on a schedule.
           </Alert>
+
+          <div
+            className="rounded-xl border p-3"
+            style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}
+          >
+            <p className="text-xs font-semibold">Already have a JSON export?</p>
+            <p className="muted mt-0.5 text-[11px] leading-relaxed">
+              Import it directly — no token or endpoint needed. Best for backfilling history in one
+              go.
+            </p>
+            <Button
+              size="sm"
+              icon={Upload}
+              className="mt-2 w-full"
+              onClick={() => setImportOpen(true)}
+            >
+              Import health JSON
+            </Button>
+          </div>
+
+          <p className="muted pt-1 text-[11px] font-semibold uppercase tracking-wide">
+            Automatic sync
+          </p>
 
           {syncUrl ? <CopyRow label="Endpoint URL" value={syncUrl} /> : null}
 
           <div>
-            <div className="mb-1 flex items-center justify-between">
-              <p className="muted text-[10px] uppercase tracking-wide">Authorization token</p>
-              {!token ? (
-                <Button size="sm" variant="ghost" onClick={revealToken}>
-                  Reveal
-                </Button>
-              ) : (
-                <Badge color="#f97316">Keep private</Badge>
-              )}
+            <div className="mb-1 flex items-center justify-between gap-2">
+              <p className="muted text-[10px] uppercase tracking-wide">Sync key</p>
+              {syncKeys.length ? <Badge color="#22c55e">{syncKeys.length} active</Badge> : null}
             </div>
-            {token ? (
+
+            {newKey ? (
               <>
-                <CopyRow label="Bearer token" value={token} secret />
-                <p className="muted mt-1.5 text-[11px]">
-                  Send as <code>Authorization: Bearer &lt;token&gt;</code>. This access token
-                  expires — for an unattended shortcut, use the long-lived refresh flow described in
-                  the README instead.
-                </p>
+                <CopyRow label="Copy it now — shown once" value={newKey} />
+                <Alert tone="warning" className="mt-2">
+                  This is the only time the key is shown. It&apos;s stored hashed, so it cannot be
+                  retrieved later — copy it into Health Auto Export now.
+                </Alert>
               </>
             ) : (
-              <p className="muted text-[11px]">
-                Reveal your session token to paste into Health Auto Export or Shortcuts.
+              <p className="muted text-[11px] leading-relaxed">
+                A permanent key for unattended sync. Unlike a session token it never expires, so
+                your 7am automation keeps working.
               </p>
             )}
+
+            {syncKeys.length ? (
+              <ul className="mt-2 space-y-1">
+                {syncKeys.map((k) => (
+                  <li
+                    key={k.id}
+                    className="flex items-center justify-between gap-2 rounded-lg border px-2.5 py-1.5"
+                    style={{ borderColor: 'var(--border)' }}
+                  >
+                    <span className="min-w-0">
+                      <code className="text-[11px]">{k.key_prefix}…</code>
+                      <span className="muted ml-2 text-[10px]">
+                        {k.last_used_at ? `used ${relativeDay(k.last_used_at.slice(0, 10))}` : 'never used'}
+                      </span>
+                    </span>
+                    <button
+                      onClick={() => revokeKey(k.id)}
+                      className="muted shrink-0 rounded p-1 hover:text-score-poor"
+                      aria-label="Revoke key"
+                    >
+                      <Trash2 size={13} />
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            ) : null}
+
+            <Button
+              size="sm"
+              variant="secondary"
+              icon={KeyRound}
+              className="mt-2 w-full"
+              loading={keyBusy}
+              onClick={createSyncKey}
+            >
+              {syncKeys.length ? 'Create another key' : 'Create sync key'}
+            </Button>
           </div>
+
+          <details className="text-[11px]">
+            <summary className="muted cursor-pointer">Use a session token instead</summary>
+            <div className="mt-2">
+              {token ? (
+                <CopyRow label="Bearer token" value={token} secret />
+              ) : (
+                <Button size="sm" variant="ghost" onClick={revealToken}>
+                  Reveal session token
+                </Button>
+              )}
+              <p className="muted mt-1.5">
+                Sent as <code>Authorization: Bearer &lt;token&gt;</code>. Expires within the hour —
+                fine for a one-off test, not for an automation.
+              </p>
+            </div>
+          </details>
 
           <div
             className="rounded-xl border p-3"
@@ -416,6 +551,8 @@ export default function Settings() {
       <p className="muted pb-4 text-center text-[10px]">
         VitalSync · scores are informational and not medical advice.
       </p>
+
+      <ImportHealthModal open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
   );
 }
