@@ -18,6 +18,7 @@ export default function ImportHealthModal({ open, onClose }) {
 
   const [text, setText] = useState('');
   const [progress, setProgress] = useState(null);
+  const [fileName, setFileName] = useState('');
   const [result, setResult] = useState(null);
   const fileInput = useRef(null);
 
@@ -31,11 +32,22 @@ export default function ImportHealthModal({ open, onClose }) {
     return parsed.days.filter((d) => d.date < key).length;
   }, [parsed]);
 
-  const readFile = async (file) => {
+  const readFile = async (event) => {
+    const input = event.target;
+    const file = input.files?.[0];
+    // Clear the input's value straight away. Without this, picking the *same*
+    // filename twice fires no change event at all — and Health Auto Export
+    // reuses names — so a second import silently did nothing.
+    input.value = '';
+
     if (!file) return;
     setResult(null);
-    const content = await file.text();
-    setText(content);
+    setFileName(file.name);
+    try {
+      setText(await file.text());
+    } catch {
+      setResult({ ok: false, message: `Could not read ${file.name}. Try pasting the contents instead.` });
+    }
   };
 
   const pasteFromClipboard = async () => {
@@ -70,6 +82,7 @@ export default function ImportHealthModal({ open, onClose }) {
     setText('');
     setResult(null);
     setProgress(null);
+    setFileName('');
     onClose();
   };
 
@@ -94,13 +107,16 @@ export default function ImportHealthModal({ open, onClose }) {
               <input
                 ref={fileInput}
                 type="file"
-                accept=".json,application/json,text/plain"
+                accept=".json,application/json,text/plain,application/octet-stream"
                 className="hidden"
-                onChange={(e) => readFile(e.target.files?.[0])}
+                onChange={readFile}
               />
             </div>
 
-            <Field label="JSON" hint={text ? `${(text.length / 1024).toFixed(0)} kB` : undefined}>
+            <Field
+              label={fileName || 'JSON'}
+              hint={text ? `${(text.length / 1024).toFixed(0)} kB` : undefined}
+            >
               <TextArea
                 rows={7}
                 value={text}

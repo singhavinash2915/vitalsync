@@ -157,16 +157,37 @@ export function sleepDurationScore(hours) {
 
 /**
  * Sleep Score = 60% duration + 40% self-rated quality (1-5 → 20-100).
+ *
+ * Returns a null score when nothing was logged. That distinction matters:
+ * "I didn't record my sleep" is not the same claim as "I slept terribly", and
+ * scoring the former as 0 silently drags readiness down by 30 points for
+ * anyone who doesn't wear their watch to bed.
+ *
+ * When only one half is present the score uses that half alone rather than
+ * treating the missing one as zero.
  */
 export function calcSleepScore({ durationHours, qualityRating } = {}) {
-  const duration = sleepDurationScore(durationHours);
-  const quality = Number.isFinite(Number(qualityRating))
-    ? clamp((Number(qualityRating) / 5) * 100, 0, 100)
-    : 0;
+  const hasDuration = Number(durationHours) > 0;
+  const hasQuality = Number.isFinite(Number(qualityRating)) && Number(qualityRating) > 0;
+
+  if (!hasDuration && !hasQuality) {
+    return { score: null, breakdown: { duration: null, quality: null, logged: false } };
+  }
+
+  const duration = hasDuration ? sleepDurationScore(durationHours) : null;
+  const quality = hasQuality ? clamp((Number(qualityRating) / 5) * 100, 0, 100) : null;
+
+  let score;
+  if (duration !== null && quality !== null) score = duration * 0.6 + quality * 0.4;
+  else score = duration ?? quality;
 
   return {
-    score: round(duration * 0.6 + quality * 0.4),
-    breakdown: { duration, quality: round(quality) },
+    score: round(score),
+    breakdown: {
+      duration: duration === null ? null : round(duration),
+      quality: quality === null ? null : round(quality),
+      logged: true,
+    },
   };
 }
 
@@ -175,6 +196,38 @@ export function calcSleepScore({ durationHours, qualityRating } = {}) {
 // ---------------------------------------------------------------------------
 
 export const DEFAULT_CALORIE_TARGET = 600;
+
+/** Exertion a typical day should land on, once the target is tuned. */
+const TYPICAL_DAY_EXERTION = 0.7;
+
+/**
+ * Suggests a daily active-calorie target from your own history.
+ *
+ * The default 600 is a guess, and a bad one for most people: if your target
+ * happens to sit near your average burn, exertion pegs at 100 on half your
+ * days. It then carries no information and permanently docks readiness by the
+ * full 20-point exertion weight.
+ *
+ * Aiming the *median* day at 70% leaves headroom, so a genuinely hard day
+ * still reads near 100 and an easy one reads low. Uses the median rather than
+ * the mean because a couple of big days shouldn't drag the target up.
+ *
+ * @param {number[]} dailyCalories active calories per day
+ * @returns {number|null} target rounded to the nearest 50
+ */
+export function suggestCalorieTarget(dailyCalories = []) {
+  const values = dailyCalories
+    .map(Number)
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .sort((a, b) => a - b);
+
+  // Fewer than a week of days isn't a distribution, it's noise.
+  if (values.length < 7) return null;
+
+  const median = values[Math.floor((values.length - 1) / 2)];
+  const target = Math.round(median / TYPICAL_DAY_EXERTION / 50) * 50;
+  return clamp(target, 200, 3000);
+}
 
 /**
  * Exertion Score — how much load you actually put on the body today.
@@ -218,19 +271,36 @@ export function calcExertionScore({ activeCalories, workouts = [], calorieTarget
 /**
  * Readiness Score — the single "what should I do today" number.
  *
- *   Recovery      × 0.5
- *   Sleep         × 0.3
- *   (100 - Exertion) × 0.2   ← yesterday's load working against you
+ *   Recovery         × 0.5
+ *   Sleep            × 0.3
+ *   (100 - Exertion) × 0.2   ← the load you've already spent
  *
- * Exertion is inverted because accumulated load reduces readiness. Weights
- * sum to 1.0, so the result stays on a true 0-100 scale.
+ * Exertion is inverted because accumulated load reduces readiness.
+ *
+ * Components that were never logged are passed as null and **excluded**, with
+ * the remaining weights renormalised so the result stays on a true 0-100
+ * scale. Without this, one unlogged component reads as a catastrophic day:
+ * no sleep record used to cost a flat 30 points, so a well-recovered morning
+ * still reported "Poor" purely because the watch wasn't worn overnight.
  */
-export function calcReadinessScore({ recovery = 0, sleep = 0, exertion = 0 } = {}) {
-  const value =
-    clamp(recovery, 0, 100) * 0.5 +
-    clamp(sleep, 0, 100) * 0.3 +
-    (100 - clamp(exertion, 0, 100)) * 0.2;
-  return { score: round(value) };
+export function calcReadinessScore({ recovery = null, sleep = null, exertion = null } = {}) {
+  const parts = [
+    { value: recovery, weight: 0.5 },
+    { value: sleep, weight: 0.3 },
+    // Exertion of 0 is a real, meaningful value (a rest day), so only a true
+    // null is treated as missing.
+    { value: exertion === null || exertion === undefined ? null : 100 - clamp(exertion, 0, 100), weight: 0.2 },
+  ].filter((p) => p.value !== null && p.value !== undefined && Number.isFinite(Number(p.value)));
+
+  if (!parts.length) return { score: null, breakdown: { basis: [] } };
+
+  const totalWeight = parts.reduce((sum, p) => sum + p.weight, 0);
+  const value = parts.reduce((sum, p) => sum + clamp(Number(p.value), 0, 100) * p.weight, 0) / totalWeight;
+
+  return {
+    score: round(value),
+    breakdown: { basis: parts.map((p) => p.weight), coverage: round(totalWeight * 100) },
+  };
 }
 
 // ---------------------------------------------------------------------------
@@ -279,22 +349,30 @@ export function computeDailyScores({
     qualityRating: sleep?.quality_rating,
   });
 
+  // Exertion is only meaningful if we know something about the day's output.
+  // With neither calories nor a workout it is unknown, not zero.
+  const hasExertionInput = Number.isFinite(Number(health?.active_calories)) || workouts.length > 0;
   const exertion = calcExertionScore({
     activeCalories: health?.active_calories,
     workouts,
     calorieTarget: profile?.calorie_target,
   });
 
+  // Recovery falls back to a neutral 50 with no baseline; that is a genuine
+  // estimate, but with no HRV *or* resting HR at all there is nothing to score.
+  const hasRecoveryInput =
+    Number.isFinite(Number(health?.hrv)) || Number.isFinite(Number(health?.resting_hr));
+
   const readiness = calcReadinessScore({
-    recovery: recovery.score,
+    recovery: hasRecoveryInput ? recovery.score : null,
     sleep: sleepScore.score,
-    exertion: exertion.score,
+    exertion: hasExertionInput ? exertion.score : null,
   });
 
   return {
-    recovery_score: recovery.score,
+    recovery_score: hasRecoveryInput ? recovery.score : null,
     sleep_score: sleepScore.score,
-    exertion_score: exertion.score,
+    exertion_score: hasExertionInput ? exertion.score : null,
     readiness_score: readiness.score,
     breakdown: {
       recovery: recovery.breakdown,

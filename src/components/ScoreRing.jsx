@@ -62,12 +62,15 @@ export function ScoreRing({
   className,
   children,
 }) {
-  const animated = useAnimatedNumber(value);
+  // A null score means "not logged", which must look different from a zero —
+  // an empty grey ring rather than a full red one.
+  const isUnscored = value === null || value === undefined || !Number.isFinite(Number(value));
+  const animated = useAnimatedNumber(isUnscored ? 0 : value);
   const pct = Math.max(0, Math.min(100, animated));
   const radius = (size - stroke) / 2;
   const circumference = 2 * Math.PI * radius;
   const dash = (pct / 100) * circumference;
-  const ringColor = color ?? scoreColor(value);
+  const ringColor = isUnscored ? 'var(--text-muted)' : (color ?? scoreColor(value));
   const gradientId = `ring-${label ?? 'score'}-${size}`.replace(/\s+/g, '-');
 
   return (
@@ -78,9 +81,11 @@ export function ScoreRing({
           height={size}
           viewBox={`0 0 ${size} ${size}`}
           role="img"
-          aria-label={`${label ?? 'Score'}: ${Math.round(value)} out of 100, ${
-            statusLabel ?? scoreLabel(value)
-          }`}
+          aria-label={
+            isUnscored
+              ? `${label ?? 'Score'}: not logged`
+              : `${label ?? 'Score'}: ${Math.round(value)} out of 100, ${statusLabel ?? scoreLabel(value)}`
+          }
         >
           <defs>
             <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -119,8 +124,8 @@ export function ScoreRing({
                   className="font-semibold leading-none tracking-tight tabular-nums"
                   style={{ fontSize: size * 0.27, color: ringColor }}
                 >
-                  {Math.round(animated)}
-                  <span style={{ fontSize: size * 0.13 }}>{suffix}</span>
+                  {isUnscored ? '—' : Math.round(animated)}
+                  {isUnscored ? null : <span style={{ fontSize: size * 0.13 }}>{suffix}</span>}
                 </span>
               ) : null}
               {sublabel ? (
@@ -137,7 +142,7 @@ export function ScoreRing({
         <div className="mt-2 text-center">
           <p className="text-xs font-semibold">{label}</p>
           <p className="text-[10px]" style={{ color: ringColor }}>
-            {statusLabel ?? scoreLabel(value)}
+            {isUnscored ? 'Not logged' : (statusLabel ?? scoreLabel(value))}
           </p>
         </div>
       ) : null}
@@ -147,15 +152,15 @@ export function ScoreRing({
 
 /** Compact linear variant used inside breakdown lists. */
 export function ScoreBar({ value = 0, label, color, unit = '%' }) {
-  const animated = useAnimatedNumber(value, 700);
-  const barColor = color ?? scoreColor(value);
+  const isUnscored = value === null || value === undefined || !Number.isFinite(Number(value));
+  const animated = useAnimatedNumber(isUnscored ? 0 : value, 700);
+  const barColor = isUnscored ? 'var(--text-muted)' : (color ?? scoreColor(value));
   return (
     <div>
       <div className="mb-1 flex items-baseline justify-between text-xs">
         <span className="muted">{label}</span>
         <span className="font-semibold tabular-nums" style={{ color: barColor }}>
-          {Math.round(animated)}
-          {unit}
+          {isUnscored ? '—' : `${Math.round(animated)}${unit}`}
         </span>
       </div>
       <div className="h-2 overflow-hidden rounded-full" style={{ background: 'var(--track)' }}>

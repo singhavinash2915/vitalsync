@@ -22,7 +22,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
 import { functionsBaseUrl, supabase, describeError } from '../lib/supabase';
 import { useTheme } from '../context/ThemeContext';
-import { DEFAULT_CALORIE_TARGET } from '../lib/scores';
+import { DEFAULT_CALORIE_TARGET, suggestCalorieTarget } from '../lib/scores';
 import { todayKey, relativeDay } from '../lib/dates';
 import {
   Card,
@@ -169,6 +169,12 @@ export default function Settings() {
     setNewKey('');
     await loadSyncKeys();
   };
+
+  // Tuned from your own logged days, not a guess. Only offered when it would
+  // actually change something.
+  const suggestedTarget = suggestCalorieTarget(health.map((h) => h.active_calories));
+  const targetIsOff =
+    suggestedTarget !== null && Math.abs(suggestedTarget - Number(form.calorie_target)) >= 100;
 
   const set = (key) => (e) => setForm((f) => ({ ...f, [key]: e.target.value }));
 
@@ -348,6 +354,21 @@ export default function Settings() {
                 unit="kcal"
               />
             </Field>
+
+            {targetIsOff ? (
+              <Alert tone="warning">
+                Based on your {health.length} logged days, <strong>{suggestedTarget} kcal</strong>{' '}
+                suits you better. A target near your average burn pegs exertion at 100 on half your
+                days, which costs you readiness for no reason.
+                <button
+                  type="button"
+                  className="mt-1 block font-semibold underline"
+                  onClick={() => setForm((f) => ({ ...f, calorie_target: suggestedTarget }))}
+                >
+                  Use {suggestedTarget} kcal
+                </button>
+              </Alert>
+            ) : null}
 
             {status.message ? <Alert tone={status.tone}>{status.message}</Alert> : null}
 

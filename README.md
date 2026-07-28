@@ -98,6 +98,10 @@ duration score × 0.6  +  quality score × 0.4
 Duration bands: `<6h → 40`, `6–7h → 60`, `7–8h → 80`, `>8h → 100`.
 Quality is your own 1–5 rating mapped to 20–100.
 
+If nothing was logged the score is **null, not 0** — "I didn't record it" is a different claim from
+"I slept badly", and scoring the former as zero quietly cost 30 points of readiness to anyone who
+doesn't wear a watch overnight.
+
 ### Exertion
 
 ```
@@ -119,6 +123,18 @@ recovery × 0.5  +  sleep × 0.3  +  (100 − exertion) × 0.2
 
 Exertion is inverted because accumulated load *reduces* readiness. The weights sum to 1.0, so the
 result stays on a true 0–100 scale.
+
+**Unlogged components are excluded and the remaining weights renormalised.** With no sleep record,
+readiness is `(recovery × 0.5 + (100 − exertion) × 0.2) / 0.7`. Only a genuine null counts as
+missing — an exertion of 0 is a real rest day, not an absence.
+
+### Tuning your calorie target
+
+The 600 default is a guess. If it lands near your average burn, exertion pegs at 100 on half your
+days, carries no information, and permanently docks readiness by the full 20-point weight.
+
+Settings shows a suggestion computed from your own logged days once you have at least a week:
+`median ÷ 0.7`, rounded to 50 — which aims a typical day at 70% and leaves headroom for a hard one.
 
 > **Note on the formula.** The original spec wrote this last term as `100 - Exertion * 0.2`, which
 > evaluates to 80–100 regardless of load and pushes the total to ~180. VitalSync implements
@@ -509,6 +525,15 @@ Refresh from Supabase forces a reload.
 
 **Scores look wrong after changing the calorie target** — Settings → Rebuild all scores. (Saving a
 new target does this automatically.)
+
+**Import fails the second time / nothing happens when picking a file** — two causes, both fixed in
+`0003` and the current build. Apply the latest migrations (`supabase db push`): a *partial* unique
+index on `workout_logs` cannot satisfy `ON CONFLICT`, so re-imports aborted with `42P10`. The other
+was the file input keeping its previous value, so re-picking the same filename fired no event.
+
+**Everything reads "Poor" even on a good morning** — you probably aren't logging sleep. Unlogged
+components are now excluded from readiness rather than scored 0, so make sure you're on the current
+build; then check Settings → Rebuild all scores.
 
 **Recovery is stuck at 50** — that's the neutral fallback when there's no 7-day baseline yet. Log
 HRV and resting HR for about a week.

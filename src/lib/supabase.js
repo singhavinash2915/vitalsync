@@ -58,6 +58,15 @@ export function describeError(error, fallback = 'Something went wrong.') {
   if (error.code === '42P01' || /relation .* does not exist/i.test(message)) {
     return 'Database tables are missing. Run supabase/migrations/0001_init.sql in the SQL editor.';
   }
+  if (error.code === '42P10' || /no unique or exclusion constraint matching/i.test(message)) {
+    return 'The database is missing an index this import needs. Apply the latest migrations in supabase/migrations, then try again.';
+  }
+  if (error.code === '42703' || /column .* does not exist/i.test(message)) {
+    return 'Your database schema is out of date — apply the latest migrations in supabase/migrations.';
+  }
+  if (error.code === '23514' || /violates check constraint/i.test(message)) {
+    return 'One of those values is outside the allowed range and was rejected by the database.';
+  }
   if (/Invalid login credentials/i.test(message)) {
     return 'Incorrect email or password.';
   }
