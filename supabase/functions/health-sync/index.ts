@@ -137,6 +137,38 @@ function convertUnits(column: string, value: number, units?: string): number {
   return value;
 }
 
+/**
+ * Hours slept from a `sleep_analysis` sample. Mirrors extractSleepHours in
+ * src/lib/healthImport.js.
+ *
+ * `asleep` is a legacy bucket for unclassified sleep and reads 0 on exactly
+ * the nights the watch DID stage properly (core/deep/rem carry the time
+ * instead), so it must never be consulted before `totalSleep`. Zero counts as
+ * absent, not as "slept nothing".
+ */
+function extractSleepHours(point: any): number | null {
+  const num = (v: unknown) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  const stageTotal = ['core', 'deep', 'rem']
+    .map((k) => Number(point?.[k]))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .reduce((sum, n) => sum + n, 0);
+
+  return (
+    num(point?.totalSleep) ??
+    num(point?.total_sleep) ??
+    num(stageTotal) ??
+    num(point?.asleep) ??
+    num(point?.qty) ??
+    num(point?.value) ??
+    num(point?.inBed) ??
+    null
+  );
+}
+
 function normaliseSleep(value: number, units?: string): number | null {
   if (!Number.isFinite(value)) return null;
   const unit = String(units ?? '').toLowerCase();
@@ -248,9 +280,8 @@ function parseMetrics(metrics: any[]) {
       if (!date) continue;
 
       let raw = point?.qty ?? point?.Avg ?? point?.avg ?? point?.value ?? point?.total;
-      if (column === 'sleep_hours' && raw === undefined) {
-        raw = point?.asleep ?? point?.totalSleep ?? point?.inBed;
-      }
+      // Sleep samples have no `qty` and need their own extraction — see above.
+      if (column === 'sleep_hours') raw = extractSleepHours(point);
 
       let value = typeof raw === 'string' ? Number(raw) : raw;
       value = column === 'sleep_hours' ? normaliseSleep(value, units) : convertUnits(column, value, units);

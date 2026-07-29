@@ -160,6 +160,46 @@ export function coerce(column, raw) {
  * nobody sleeps 480 hours, and nobody sleeps 0.3 hours in a night worth
  * recording.
  */
+/**
+ * Extracts hours slept from a Health Auto Export `sleep_analysis` sample.
+ *
+ * The shape changed with staged sleep tracking, and the two forms disagree in
+ * a way that is easy to get wrong:
+ *
+ *   nap, no stages   → { totalSleep: 1.26, asleep: 1.26, core: 0, deep: 0, rem: 0 }
+ *   night, staged    → { totalSleep: 6.47, asleep: 0,    core: 4.64, deep: 0.57, rem: 1.26 }
+ *
+ * `asleep` is a legacy bucket for sleep the watch couldn't classify, so it is
+ * **0 on exactly the nights with the best data**. Reading it first — and using
+ * `??`, which happily accepts 0 — reported a full night as zero hours.
+ *
+ * Priority: the total the exporter computed, else the stages summed, else the
+ * legacy fields. Zero is treated as absent throughout, since a sleep record
+ * that genuinely means "no sleep" is not worth storing either.
+ */
+function extractSleepHours(point) {
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+
+  const stageTotal = ['core', 'deep', 'rem']
+    .map((k) => Number(point?.[k]))
+    .filter((n) => Number.isFinite(n) && n > 0)
+    .reduce((sum, n) => sum + n, 0);
+
+  return (
+    num(point?.totalSleep) ??
+    num(point?.total_sleep) ??
+    num(stageTotal) ??
+    num(point?.asleep) ??
+    num(point?.qty) ??
+    num(point?.value) ??
+    num(point?.inBed) ??
+    null
+  );
+}
+
 function normaliseSleep(value, units) {
   if (!Number.isFinite(value)) return null;
   const unit = String(units ?? '').toLowerCase();
@@ -223,9 +263,9 @@ function parseMetricsEnvelope(node, acc) {
         point?.value ??
         point?.total;
 
-      if (column === 'sleep_hours' && raw === undefined) {
-        raw = point?.asleep ?? point?.totalSleep ?? point?.total_sleep ?? point?.inBed;
-      }
+      // Sleep samples carry no `qty`; they need their own extraction, and it
+      // must run before the generic keys above can pick up a misleading zero.
+      if (column === 'sleep_hours') raw = extractSleepHours(point);
 
       let value = typeof raw === 'string' ? Number(raw) : raw;
       value = column === 'sleep_hours' ? normaliseSleep(value, units) : convertUnits(column, value, units);
