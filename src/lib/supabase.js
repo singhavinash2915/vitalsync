@@ -58,6 +58,12 @@ export function describeError(error, fallback = 'Something went wrong.') {
   if (error.code === '42P01' || /relation .* does not exist/i.test(message)) {
     return 'Database tables are missing. Run supabase/migrations/0001_init.sql in the SQL editor.';
   }
+  if (error.code === 'PGRST102' || /All object keys must match/i.test(message)) {
+    return 'The rows being sent had mismatched fields, so the database rejected the batch. This is a bug — please report it.';
+  }
+  if (error.code === 'PGRST204' || /Could not find the .* column/i.test(message)) {
+    return 'Your database is missing a column this build expects. Apply the latest migrations in supabase/migrations.';
+  }
   if (error.code === '42P10' || /no unique or exclusion constraint matching/i.test(message)) {
     return 'The database is missing an index this import needs. Apply the latest migrations in supabase/migrations, then try again.';
   }

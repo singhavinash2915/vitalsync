@@ -22,7 +22,7 @@ createRoot(document.getElementById('root')).render(
 
 // autoUpdate: a new deploy activates on the next navigation. Reloading here
 // keeps a long-lived standalone PWA session from running stale code for days.
-registerSW({
+const updateSW = registerSW({
   immediate: true,
   onNeedRefresh() {
     window.location.reload();
@@ -30,4 +30,10 @@ registerSW({
   onOfflineReady() {
     console.info('[VitalSync] Ready to work offline.');
   },
+});
+
+// An installed PWA is rarely reloaded, so it can sit on a cached build for
+// days. Re-check whenever it comes back to the foreground.
+document.addEventListener('visibilitychange', () => {
+  if (document.visibilityState === 'visible') updateSW?.(true).catch(() => {});
 });

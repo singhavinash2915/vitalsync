@@ -6,8 +6,15 @@ import { VitePWA } from 'vite-plugin-pwa';
 // Override with BASE_PATH=/ when deploying to a custom domain or Netlify/Vercel.
 const base = process.env.BASE_PATH ?? '/vitalsync/';
 
+const buildId = new Date().toISOString().slice(0, 16).replace('T', ' ');
+
 export default defineConfig({
   base,
+  define: {
+    // Surfaced in Settings. An installed PWA can serve a cached build for a
+    // long time; without a visible stamp there is no way to tell which one.
+    __BUILD_ID__: JSON.stringify(buildId),
+  },
   plugins: [
     react(),
     VitePWA({

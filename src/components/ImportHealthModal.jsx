@@ -249,6 +249,17 @@ export default function ImportHealthModal({ open, onClose }) {
         ) : (
           <>
             <Alert tone="error">{result.message}</Alert>
+            {result.detail ? (
+              <details className="text-[11px]">
+                <summary className="muted cursor-pointer">Technical detail</summary>
+                <pre
+                  className="mt-1 overflow-x-auto rounded-lg border p-2 text-[10px] leading-relaxed"
+                  style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}
+                >
+                  {result.detail}
+                </pre>
+              </details>
+            ) : null}
             <Button variant="secondary" className="w-full" onClick={() => setResult(null)}>
               Back
             </Button>

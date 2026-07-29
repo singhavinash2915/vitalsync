@@ -1,6 +1,7 @@
 import { create } from 'zustand';
 import { supabase, describeError } from '../lib/supabase';
 import { computeDailyScores } from '../lib/scores';
+import { HEALTH_COLUMNS } from '../lib/healthImport';
 import { todayKey, toKey, lastNDays, fromKey } from '../lib/dates';
 import { subDays } from 'date-fns';
 
@@ -13,6 +14,9 @@ import { subDays } from 'date-fns';
  */
 
 const WINDOW_DAYS = 120;
+
+/** Written on every imported sleep row so the key sets stay uniform. */
+const SLEEP_COLUMNS = ['duration_hours', 'quality_rating', 'bedtime', 'wake_time'];
 
 const byDateDesc = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
 
@@ -256,26 +260,45 @@ export const useDataStore = create((set, get) => ({
     const healthRows = [];
     const sleepRows = [];
 
+    /**
+     * Every row in a bulk upsert must carry an identical key set, or PostgREST
+     * rejects the whole batch with `PGRST102: All object keys must match`.
+     *
+     * Health exports are inherently ragged — Apple records HRV on the nights
+     * you wore the watch and nothing on the others — so building rows from
+     * only the fields each day happens to have produces mismatched keys and a
+     * 400 for the entire import.
+     *
+     * Writing a fixed column list fixes that. Each cell falls back to the
+     * value already stored, so a partial export never blanks a metric it
+     * simply didn't include, and only lands as null when it was never known.
+     */
+    const buildRow = (columns, { date, values, existing }) => {
+      const row = { user_id: userId, date, source: 'import' };
+      for (const column of columns) {
+        row[column] = values?.[column] ?? existing?.[column] ?? null;
+      }
+      return row;
+    };
+
     for (const day of days) {
       if (day.health) {
-        const existing = state.health.find((r) => r.date === day.date);
-        healthRows.push({
-          ...(existing ?? {}),
-          user_id: userId,
-          date: day.date,
-          ...day.health,
-          source: 'import',
-        });
+        healthRows.push(
+          buildRow(HEALTH_COLUMNS, {
+            date: day.date,
+            values: day.health,
+            existing: state.health.find((r) => r.date === day.date),
+          })
+        );
       }
       if (day.sleep) {
-        const existing = state.sleep.find((r) => r.date === day.date);
-        sleepRows.push({
-          ...(existing ?? {}),
-          user_id: userId,
-          date: day.date,
-          ...day.sleep,
-          source: 'import',
-        });
+        sleepRows.push(
+          buildRow(SLEEP_COLUMNS, {
+            date: day.date,
+            values: day.sleep,
+            existing: state.sleep.find((r) => r.date === day.date),
+          })
+        );
       }
     }
 
@@ -292,9 +315,17 @@ export const useDataStore = create((set, get) => ({
 
     // Only workouts carrying Apple's stable UUID can be deduplicated; without
     // one, a second import would silently double the session.
+    const WORKOUT_COLUMNS = [
+      'type',
+      'duration_mins',
+      'intensity',
+      'calories_burned',
+      'notes',
+      'external_id',
+    ];
     const workoutRows = workouts
       .filter((w) => w.external_id)
-      .map((w) => ({ ...w, user_id: userId, source: 'import' }));
+      .map((w) => buildRow(WORKOUT_COLUMNS, { date: w.date, values: w }));
 
     try {
       await writeChunks('health_logs', healthRows);
@@ -324,7 +355,15 @@ export const useDataStore = create((set, get) => ({
     } catch (error) {
       const message = describeError(error, 'Could not import that file.');
       set({ saving: false, error: message });
-      return { ok: false, message };
+      // Keep the raw error for the UI's technical-detail panel: the friendly
+      // string is for reading, this is for diagnosing.
+      return {
+        ok: false,
+        message,
+        detail: [error?.code, error?.message, error?.details, error?.hint]
+          .filter(Boolean)
+          .join(' — '),
+      };
     }
   },
 

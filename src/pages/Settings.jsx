@@ -210,6 +210,23 @@ export default function Settings() {
     setBusy(false);
   };
 
+  /**
+   * Clears the service worker and every cache, then reloads. The installed PWA
+   * updates on its own, but only on its own schedule — this is the escape
+   * hatch when a device is provably stuck on an old build.
+   */
+  const forceUpdate = async () => {
+    try {
+      const registrations = await navigator.serviceWorker?.getRegistrations?.();
+      await Promise.all((registrations ?? []).map((r) => r.unregister()));
+      const keys = await caches?.keys?.();
+      await Promise.all((keys ?? []).map((k) => caches.delete(k)));
+    } catch {
+      // Nothing to clear, or the browser blocked it — reloading is still right.
+    }
+    window.location.reload(true);
+  };
+
   const revealToken = async () => {
     const { data } = await supabase.auth.getSession();
     setToken(data.session?.access_token ?? '');
@@ -569,9 +586,20 @@ export default function Settings() {
         Sign out
       </Button>
 
-      <p className="muted pb-4 text-center text-[10px]">
-        VitalSync · scores are informational and not medical advice.
-      </p>
+      <div className="pb-4 text-center">
+        <p className="muted text-[10px]">
+          VitalSync · build {typeof __BUILD_ID__ === 'string' ? __BUILD_ID__ : 'dev'}
+        </p>
+        <button
+          onClick={forceUpdate}
+          className="muted mt-1 text-[10px] underline hover:text-accent"
+        >
+          Force update
+        </button>
+        <p className="muted mt-2 text-[10px]">
+          Scores are informational and not medical advice.
+        </p>
+      </div>
 
       <ImportHealthModal open={importOpen} onClose={() => setImportOpen(false)} />
     </div>
