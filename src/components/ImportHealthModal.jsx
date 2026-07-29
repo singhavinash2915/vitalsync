@@ -2,6 +2,7 @@ import { useMemo, useRef, useState } from 'react';
 import { Upload, FileJson, CheckCircle2, ClipboardPaste } from 'lucide-react';
 
 import { parseHealthExport, COLUMN_LABELS } from '../lib/healthImport';
+import { parseAppleHealthXml, looksLikeAppleHealthXml } from '../lib/appleHealthXml';
 import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
 import { prettyDate } from '../lib/dates';
@@ -20,9 +21,14 @@ export default function ImportHealthModal({ open, onClose }) {
   const [progress, setProgress] = useState(null);
   const [fileName, setFileName] = useState('');
   const [result, setResult] = useState(null);
+  // Apple's export.xml is far too large to hold in a textarea, so it is parsed
+  // straight off disk and its result kept here instead of in `text`.
+  const [xmlParsed, setXmlParsed] = useState(null);
+  const [scanning, setScanning] = useState(null);
   const fileInput = useRef(null);
 
-  const parsed = useMemo(() => (text.trim() ? parseHealthExport(text) : null), [text]);
+  const jsonParsed = useMemo(() => (text.trim() ? parseHealthExport(text) : null), [text]);
+  const parsed = xmlParsed ?? jsonParsed;
 
   const outOfWindow = useMemo(() => {
     if (!parsed?.ok) return 0;
@@ -42,16 +48,36 @@ export default function ImportHealthModal({ open, onClose }) {
 
     if (!file) return;
     setResult(null);
+    setXmlParsed(null);
     setFileName(file.name);
+
     try {
+      if (await looksLikeAppleHealthXml(file)) {
+        // Streamed in slices — a multi-gigabyte export must never be read into
+        // memory or dropped into the textarea.
+        setText('');
+        setScanning({ pct: 0, size: file.size });
+        const outcome = await parseAppleHealthXml(file, {
+          onProgress: (pct) => setScanning({ pct, size: file.size }),
+        });
+        setScanning(null);
+        setXmlParsed(outcome);
+        return;
+      }
       setText(await file.text());
-    } catch {
-      setResult({ ok: false, message: `Could not read ${file.name}. Try pasting the contents instead.` });
+    } catch (error) {
+      setScanning(null);
+      setResult({
+        ok: false,
+        message: `Could not read ${file.name}.`,
+        detail: String(error?.message ?? error),
+      });
     }
   };
 
   const pasteFromClipboard = async () => {
     try {
+      setXmlParsed(null);
       setText(await navigator.clipboard.readText());
       setResult(null);
     } catch {
@@ -83,6 +109,8 @@ export default function ImportHealthModal({ open, onClose }) {
     setResult(null);
     setProgress(null);
     setFileName('');
+    setXmlParsed(null);
+    setScanning(null);
     onClose();
   };
 
@@ -92,9 +120,13 @@ export default function ImportHealthModal({ open, onClose }) {
         {!result ? (
           <>
             <Alert tone="info">
-              Paste the JSON from <strong>Health Auto Export</strong>, an iOS Shortcut, or any
-              export with dated values. Existing days are updated, not duplicated — importing the
-              same file twice is safe.
+              <strong>Free route:</strong> iPhone Health app → your photo (top right) →{' '}
+              <em>Export All Health Data</em> → uncompress the .zip in Files → pick{' '}
+              <code>export.xml</code> below. No paid app needed, and it&apos;s read straight off
+              disk however large it is.
+              <br />
+              Health Auto Export JSON and iOS Shortcut payloads work too — paste or choose the
+              file. Re-importing is always safe: days update rather than duplicate.
             </Alert>
 
             <div className="grid grid-cols-2 gap-2">
@@ -107,15 +139,37 @@ export default function ImportHealthModal({ open, onClose }) {
               <input
                 ref={fileInput}
                 type="file"
-                accept=".json,application/json,text/plain,application/octet-stream"
+                accept=".json,.xml,application/json,text/xml,application/xml,text/plain,application/octet-stream"
                 className="hidden"
                 onChange={readFile}
               />
             </div>
 
+            {scanning ? (
+              <div>
+                <p className="muted mb-1 text-[11px]">
+                  Scanning {fileName} ({(scanning.size / 1e6).toFixed(0)} MB) — {scanning.pct}%
+                </p>
+                <div className="h-1.5 overflow-hidden rounded-full" style={{ background: 'var(--track)' }}>
+                  <div
+                    className="h-full rounded-full bg-accent transition-all"
+                    style={{ width: `${scanning.pct}%` }}
+                  />
+                </div>
+              </div>
+            ) : null}
+
+            {xmlParsed ? (
+              <Alert tone="info">
+                Read <strong>{fileName}</strong> directly — {xmlParsed.recordsSeen?.toLocaleString()}{' '}
+                records scanned. Nothing to paste.
+              </Alert>
+            ) : null}
+
             <Field
-              label={fileName || 'JSON'}
+              label={fileName && !xmlParsed ? fileName : 'JSON'}
               hint={text ? `${(text.length / 1024).toFixed(0)} kB` : undefined}
+              className={xmlParsed || scanning ? 'hidden' : undefined}
             >
               <TextArea
                 rows={7}

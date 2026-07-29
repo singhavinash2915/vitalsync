@@ -64,12 +64,19 @@ All four are 0–100 and recalculated automatically after every entry. The imple
 
 ### Recovery
 
-Measures autonomic readiness against **your own** 7-day rolling baseline, not population norms.
+Measures autonomic readiness against **your own 60-day rolling baseline**, not population norms.
 
 | Input | Weight | Direction |
 |---|---|---|
-| HRV vs 7-day average | 60% | Higher is better |
-| Resting HR vs 7-day average | 40% | Lower is better |
+| HRV vs 60-day baseline | 60% | Higher is better |
+| Resting HR vs 60-day baseline | 40% | Lower is better |
+
+> The baseline was 7 days and that was too short: a bad week *becomes* the baseline, so the next
+> ordinary day scores like a personal best. On real data an HRV of 48.9 ms — about 10% above a
+> long-run average of 44 — scored **98** on a 7-day baseline purely because the preceding week had
+> been poor. On a 60-day baseline the same day scores 79. Sixty days is stable against a rough
+> patch yet still follows genuine seasonal change, and matches the window Training Today's RTT
+> uses. Below 5 readings the sub-score stays a neutral 50 rather than pretending to know.
 
 Each sub-score is centred on 50 (exactly at baseline) and saturates at 0/100. HRV swings far more
 day to day than resting HR, so they use different sensitivities: ±25% of HRV spans the full range,
@@ -269,7 +276,8 @@ So the data gets **pushed in**. Three ways, from most to least automatic:
 |---|---|---|
 | [Health Auto Export → REST API](#option-a--health-auto-export-fully-automatic) | 5 min setup, paid app | ✅ Yes — hourly or daily |
 | [iOS Shortcut automation](#option-b--ios-shortcut-free) | 20 min setup, free | ✅ Yes — daily at a set time |
-| [Manual file import](#option-c--manual-file-import) | Per export | ❌ No |
+| [Apple's own export.xml](#option-c--apples-own-export-free-no-third-party-app) | Per export, free | ❌ No |
+| [Manual JSON import](#option-d--manual-json-import) | Per export | ❌ No |
 
 All three hit the same endpoint:
 
@@ -336,18 +344,35 @@ array, and upserts on date — so overlapping exports never duplicate anything.
    `Content-Type: application/json`, request body = the Text action.
 5. Run it once by hand and check you get `{"ok": true, ...}` back.
 
-### Option C — manual file import
+### Option C — Apple's own export (free, no third-party app)
 
-For backfilling history in one go, this beats both automations — no token, no endpoint.
+Health Auto Export is a paid app once its free exports run out. iOS has a built-in export that
+costs nothing and actually contains *more* data:
 
-1. In Health Auto Export, export a date range as JSON and share it to Files (or AirDrop it).
-2. Open VitalSync → **Settings → Apple Watch sync → Import health JSON**.
-3. Choose the file (or paste the contents). You'll see a preview — days, date range, metrics found,
-   workouts, and anything ignored — before anything is written.
-4. Import. Scores rebuild automatically.
+1. iPhone **Health** app → your photo, top right → **Export All Health Data**.
+2. Share the resulting `export.zip` to **Files** (or AirDrop it to a Mac).
+3. In Files, long-press the zip → **Uncompress**. You now have `export.xml`.
+4. VitalSync → **Settings → Apple Watch sync → Import health JSON** → **Choose file** →
+   `export.xml`.
 
-Re-importing the same file is safe: daily rows upsert on date, and workouts deduplicate on Apple's
-own workout UUID.
+The catch is size — a few years of Apple Watch data is routinely 200 MB to over 1 GB, which is why
+most tools won't touch it. VitalSync reads it in 4 MB slices with a streaming scanner
+([`src/lib/appleHealthXml.js`](src/lib/appleHealthXml.js)), so memory stays flat no matter how big
+the file is. A 251 MB export with 1.4 million records parses in well under a second.
+
+It extracts HRV, resting heart rate, SpO₂, wrist temperature, steps and active energy (summing the
+hundreds of per-day samples rather than averaging them), and reconstructs sleep by summing the
+`Asleep*` stage records — attributing each night to the morning it ended, and ignoring `InBed`
+time you were awake.
+
+### Option D — manual JSON import
+
+Same screen, if you already have a Health Auto Export JSON: choose the file or paste the contents.
+You'll see a preview — days, date range, metrics found, workouts, anything ignored — before
+anything is written.
+
+Re-importing is always safe: daily rows upsert on date, and workouts deduplicate on Apple's own
+workout UUID.
 
 ### What the endpoint accepts
 

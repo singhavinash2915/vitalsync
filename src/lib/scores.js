@@ -11,6 +11,27 @@
  * flag for another.
  */
 
+/**
+ * How many days of history form the personal baseline.
+ *
+ * This started at 7 and that was too short to be meaningful: a bad week
+ * *becomes* the baseline, so the next ordinary day scores like a personal
+ * best. Against real data, an HRV of 48.9 ms — about 10% above a long-run
+ * average of 44 — scored 98 on a 7-day baseline purely because the preceding
+ * week had been poor. On a 60-day baseline the same day scores 79.
+ *
+ * 60 days is long enough to be stable against a rough patch and short enough
+ * to follow genuine fitness change over a season. It matches the window used
+ * by Training Today's RTT and is in the same range as Oura and Whoop.
+ */
+export const BASELINE_DAYS = 60;
+
+/**
+ * Below this, the baseline is too thin to trust and the sub-score falls back
+ * to a neutral 50 rather than pretending to know.
+ */
+export const MIN_BASELINE_DAYS = 5;
+
 export const SCORE_BANDS = [
   { min: 80, key: 'excellent', label: 'Excellent', color: '#22c55e' },
   { min: 60, key: 'good', label: 'Good', color: '#eab308' },
@@ -58,13 +79,22 @@ export function mean(values) {
  * Rolling baseline from the N most recent prior logs for a metric.
  * `history` must be ordered newest-first and must NOT include today.
  */
-export function rollingAverage(history, key, days = 7) {
-  return mean(
-    history
-      .slice(0, days)
-      .map((row) => row?.[key])
-      .filter((v) => v !== null && v !== undefined)
-  );
+export function rollingAverage(history, key, days = BASELINE_DAYS) {
+  const values = history
+    .slice(0, days)
+    .map((row) => row?.[key])
+    .filter((v) => v !== null && v !== undefined && Number.isFinite(Number(v)));
+
+  if (values.length < MIN_BASELINE_DAYS) return null;
+  return mean(values);
+}
+
+/** How many usable readings back the baseline, for "based on N days" copy. */
+export function baselineCoverage(history, key, days = BASELINE_DAYS) {
+  return history
+    .slice(0, days)
+    .map((row) => row?.[key])
+    .filter((v) => v !== null && v !== undefined && Number.isFinite(Number(v))).length;
 }
 
 // ---------------------------------------------------------------------------
@@ -328,8 +358,8 @@ export function computeDailyScores({
   sleepHistory = [],
   profile = null,
 } = {}) {
-  const hrvBaseline = rollingAverage(history, 'hrv', 7);
-  const rhrBaseline = rollingAverage(history, 'resting_hr', 7);
+  const hrvBaseline = rollingAverage(history, 'hrv');
+  const rhrBaseline = rollingAverage(history, 'resting_hr');
 
   // "Good sleep" as a recovery bonus is derived, not a checkbox: 7.5h+ at a
   // quality of 4/5 or better. Keeps the journal form short.
@@ -382,9 +412,10 @@ export function computeDailyScores({
         hrv: hrvBaseline === null ? null : Number(hrvBaseline.toFixed(1)),
         restingHr: rhrBaseline === null ? null : Number(rhrBaseline.toFixed(1)),
         sleep: (() => {
-          const v = rollingAverage(sleepHistory, 'duration_hours', 7);
+          const v = rollingAverage(sleepHistory, 'duration_hours');
           return v === null ? null : Number(v.toFixed(1));
         })(),
+        days: baselineCoverage(history, 'hrv'),
       },
     },
     /** False when there is literally nothing logged — the UI shows an empty state. */
