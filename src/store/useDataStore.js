@@ -18,6 +18,22 @@ const WINDOW_DAYS = 120;
 /** Written on every imported sleep row so the key sets stay uniform. */
 const SLEEP_COLUMNS = ['duration_hours', 'quality_rating', 'bedtime', 'wake_time'];
 
+/**
+ * Columns declared `integer` in Postgres. Enforced here as well as in each
+ * parser: a decimal reaching one of these aborts the whole import with
+ * `22P02 invalid input syntax for type integer`, and a single new data source
+ * getting it wrong shouldn't be able to break the write path.
+ */
+const INTEGER_COLUMNS = new Set([
+  'resting_hr',
+  'active_calories',
+  'steps',
+  'quality_rating',
+  'duration_mins',
+  'intensity',
+  'calories_burned',
+]);
+
 const byDateDesc = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
 
 /** Index an array of rows by their `date` for O(1) day lookups. */
@@ -276,7 +292,11 @@ export const useDataStore = create((set, get) => ({
     const buildRow = (columns, { date, values, existing }) => {
       const row = { user_id: userId, date, source: 'import' };
       for (const column of columns) {
-        row[column] = values?.[column] ?? existing?.[column] ?? null;
+        const value = values?.[column] ?? existing?.[column] ?? null;
+        row[column] =
+          INTEGER_COLUMNS.has(column) && Number.isFinite(Number(value))
+            ? Math.round(Number(value))
+            : value;
       }
       return row;
     };

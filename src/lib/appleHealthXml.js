@@ -40,6 +40,15 @@ const ASLEEP_VALUES = new Set([
   'HKCategoryValueSleepAnalysisAsleepREM',
 ]);
 
+/**
+ * Columns Postgres declares as `integer`. A daily mean or sum lands on a
+ * decimal far more often than not — averaging resting heart rate, or summing
+ * hundreds of fractional energy samples — and Postgres rejects the entire
+ * batch with `22P02 invalid input syntax for type integer`. Against a real
+ * 7-year export this affected 1,399 of 2,421 days.
+ */
+const INTEGER_COLUMNS = new Set(['resting_hr', 'active_calories', 'steps', 'quality_rating']);
+
 const RANGES = {
   hrv: [1, 400],
   resting_hr: [25, 150],
@@ -90,11 +99,19 @@ function normalise(column, value, unit) {
  * @returns the same shape as parseHealthExport()
  */
 export async function parseAppleHealthXml(file, { onProgress } = {}) {
+  // date -> { column: { sum, count } } for averaged metrics, and
+  // date -> { column: { source: total } } for summed ones. Summed metrics need
+  // the per-source split because the raw export contains the SAME activity
+  // recorded independently by the Watch and the iPhone — Apple's Health app
+  // picks one source per period, the export does not. Summing everything
+  // double-counts: a real day showed Watch 10,578 + iPhone 8,228 = 18,806
+  // steps against the 10,715 the Health app reports.
   const totals = new Map(); // date -> { column: { sum, count } }
+  const sourceTotals = new Map(); // date -> { column: { source: total } }
   const sleepByDate = new Map(); // date -> hours asleep
   let recordsSeen = 0;
 
-  const add = (date, column, value) => {
+  const add = (date, column, value, source) => {
     const clean = Number(value);
     if (!Number.isFinite(clean)) return;
     const range = RANGES[column];
@@ -102,6 +119,16 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
     // legitimately tiny while the daily total is large.
     const cfg = Object.values(RECORD_TYPES).find((c) => c.column === column);
     if (cfg?.agg === 'mean' && range && (clean < range[0] || clean > range[1])) return;
+
+    if (cfg?.agg === 'sum') {
+      const day = sourceTotals.get(date) ?? {};
+      const bySource = day[column] ?? {};
+      const key = source || 'unknown';
+      bySource[key] = (bySource[key] ?? 0) + clean;
+      day[column] = bySource;
+      sourceTotals.set(date, day);
+      return;
+    }
 
     const day = totals.get(date) ?? {};
     const cell = day[column] ?? { sum: 0, count: 0 };
@@ -158,7 +185,12 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
       const raw = Number(attr(tag, 'value'));
       if (!date || !Number.isFinite(raw)) continue;
 
-      add(date, config.column, normalise(config.column, raw, attr(tag, 'unit')));
+      add(
+        date,
+        config.column,
+        normalise(config.column, raw, attr(tag, 'unit')),
+        attr(tag, 'sourceName')
+      );
     }
 
     onProgress?.(Math.min(100, Math.round(((offset + CHUNK_BYTES) / file.size) * 100)));
@@ -166,19 +198,37 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
 
   // --- collapse to one row per day -----------------------------------------
   const days = [];
-  const allDates = new Set([...totals.keys(), ...sleepByDate.keys()]);
+  const allDates = new Set([
+    ...totals.keys(),
+    ...sourceTotals.keys(),
+    ...sleepByDate.keys(),
+  ]);
 
   for (const date of [...allDates].sort()) {
     const cells = totals.get(date) ?? {};
+    const summed = sourceTotals.get(date) ?? {};
     const health = {};
 
+    // Summed metrics: take the single most complete source rather than adding
+    // them together. On a day the watch wasn't worn the phone wins on its own,
+    // so nothing is lost.
+    for (const [column, bySource] of Object.entries(summed)) {
+      const best = Math.max(...Object.values(bySource));
+      const range = RANGES[column];
+      if (range && (best < range[0] || best > range[1])) continue;
+      health[column] = INTEGER_COLUMNS.has(column)
+        ? Math.round(best)
+        : Math.round(best * 100) / 100;
+    }
+
     for (const [column, cell] of Object.entries(cells)) {
-      const config = Object.values(RECORD_TYPES).find((c) => c.column === column);
-      let value = config?.agg === 'sum' ? cell.sum : cell.sum / cell.count;
+      const value = cell.sum / cell.count;
 
       const range = RANGES[column];
       if (range && (value < range[0] || value > range[1])) continue;
-      health[column] = Math.round(value * 100) / 100;
+      health[column] = INTEGER_COLUMNS.has(column)
+        ? Math.round(value)
+        : Math.round(value * 100) / 100;
     }
 
     const hours = sleepByDate.get(date);
