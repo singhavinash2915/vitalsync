@@ -412,11 +412,40 @@ Deno.serve(async (req: Request) => {
   }
 
   // --- ingest --------------------------------------------------------------
-  let body: any;
+  //
+  // Three body shapes are accepted, because the easiest client to build is
+  // rarely the one that speaks JSON. An iOS Shortcut can fill in a form body
+  // through its own key/value UI without the user ever typing a brace, and a
+  // bare query string works from anything that can hit a URL.
+  const contentType = (req.headers.get('content-type') ?? '').toLowerCase();
+  let body: any = {};
+
   try {
-    body = await req.json();
-  } catch {
-    return json({ error: 'Body must be valid JSON.' }, 400);
+    if (contentType.includes('application/json')) {
+      body = await req.json();
+    } else if (contentType.includes('form')) {
+      // Covers both x-www-form-urlencoded and multipart/form-data.
+      const form = await req.formData();
+      for (const [key, value] of form.entries()) body[key] = value;
+    } else {
+      // No usable content type: try JSON, fall back to treating it as a form.
+      const raw = (await req.text()).trim();
+      if (raw.startsWith('{') || raw.startsWith('[')) {
+        body = JSON.parse(raw);
+      } else if (raw) {
+        for (const [key, value] of new URLSearchParams(raw).entries()) body[key] = value;
+      }
+    }
+  } catch (error) {
+    return json(
+      { error: 'Could not read the request body.', detail: String((error as Error)?.message ?? error) },
+      400
+    );
+  }
+
+  // Query parameters merge in too, so ?hrv=48&resting_hr=53 works on its own.
+  for (const [key, value] of url.searchParams.entries()) {
+    if (key !== 'action' && body[key] === undefined) body[key] = value;
   }
 
   const envelope = body?.data ?? body;

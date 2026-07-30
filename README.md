@@ -276,7 +276,7 @@ So the data gets **pushed in**. Three ways, from most to least automatic:
 |---|---|---|
 | [Health Auto Export → REST API](#option-a--health-auto-export-fully-automatic) | 5 min setup, paid app | ✅ Yes — hourly or daily |
 | [iOS Shortcut automation](#option-b--ios-shortcut-free) | 20 min setup, free | ✅ Yes — daily at a set time |
-| [Apple's own export.xml](#option-c--apples-own-export-free-no-third-party-app) | Per export, free | ❌ No |
+| [Apple's own export.xml](#option-c--apples-own-export-free-no-third-party-app) | One-time backfill, free | ❌ No — see note |
 | [Manual JSON import](#option-d--manual-json-import) | Per export | ❌ No |
 
 All three hit the same endpoint:
@@ -319,30 +319,64 @@ reads HealthKit in the background and posts on a schedule.
 That's it. The endpoint understands Health Auto Export's native envelope, including its `workouts`
 array, and upserts on date — so overlapping exports never duplicate anything.
 
-### Option B — iOS Shortcut (free)
+### Option B — iOS Shortcut (free, and the right answer for daily use)
 
-1. **Shortcuts → Automation → New → Time of Day → 7:00 am → Run Immediately**.
-2. Add **Find Health Samples** actions for each metric. For each: set the type, sort by *Start Date*
-   descending, limit to 1, then **Get Details of Health Sample → Value**, and save to a variable.
-3. Add a **Text** action containing the JSON body:
+Shortcuts is built into iOS. This is the only route that is both free and automatic, so it's what
+you actually want running every morning. Roughly ten minutes to build once.
 
-```json
-{
-  "date": "2026-07-28",
-  "hrv": 62.4,
-  "resting_hr": 51,
-  "spo2": 97,
-  "active_calories": 540,
-  "steps": 9231,
-  "sleep_hours": 7.4
-}
-```
+The endpoint accepts a **form body**, which matters here: Shortcuts lets you add key/value pairs
+in its own UI, so you never have to hand-write JSON inside a Text action.
 
-   Substitute your variables for the numbers. Every field is optional and `date` defaults to today.
+**1. New automation**
+Shortcuts → **Automation** tab → **+** → **Time of Day** → 7:00 am → Daily → **Run Immediately**
+(turn *Notify When Run* off).
 
-4. Add **Get Contents of URL**: method POST, headers `X-Sync-Key: <your key>` and
-   `Content-Type: application/json`, request body = the Text action.
-5. Run it once by hand and check you get `{"ok": true, ...}` back.
+**2. Pull each metric**
+For each of the five below, add these three actions in order:
+
+| Action | Setting |
+|---|---|
+| **Find Health Samples** | type as per table, **Sort by** Start Date, **Order** Latest First, **Limit** 1 |
+| **Get Details of Health Sample** | Detail: **Value** |
+| **Set Variable** | name it, e.g. `hrv` |
+
+| Metric | Health sample type | Variable |
+|---|---|---|
+| HRV | Heart Rate Variability | `hrv` |
+| Resting heart rate | Resting Heart Rate | `rhr` |
+| Steps | Steps — set **Limit** off, add **Calculate Statistics → Sum** | `steps` |
+| Active energy | Active Energy — **Limit** off, **Calculate Statistics → Sum** | `cal` |
+| Sleep | Sleep — **Limit** off, **Calculate Statistics → Sum**, Detail: **Duration** | `sleep` |
+
+For Steps, Active Energy and Sleep, set the Find action's date filter to **Start Date is today**
+(or *yesterday* for sleep) so you sum one day rather than all history.
+
+**3. Send it**
+Add **Get Contents of URL**:
+
+- **URL:** `https://vbyhumvshwsvbjtpwrmx.supabase.co/functions/v1/health-sync`
+- **Method:** POST
+- **Headers:** `X-Sync-Key` → your `vsk_…` key from Settings
+- **Request Body:** **Form** ← not JSON
+- Add fields, dropping the matching variable into each value:
+
+  | Key | Value |
+  |---|---|
+  | `hrv` | `hrv` variable |
+  | `resting_hr` | `rhr` variable |
+  | `steps` | `steps` variable |
+  | `active_calories` | `cal` variable |
+  | `sleep_hours` | `sleep` variable |
+
+Every field is optional and `date` defaults to today, so start with two or three and add the rest
+once it works.
+
+**4. Test it**
+Run the shortcut manually. You want `{"ok": true, ...}` back. Add a **Show Result** action while
+testing, then delete it.
+
+Sleep duration usually comes back in **minutes** or **seconds** — that's fine, the endpoint infers
+the unit from magnitude and converts.
 
 ### Option C — Apple's own export (free, no third-party app)
 
@@ -355,10 +389,19 @@ costs nothing and actually contains *more* data:
 4. VitalSync → **Settings → Apple Watch sync → Import health JSON** → **Choose file** →
    `export.xml`.
 
+**Use this once, for backfill — not daily.** The export is your entire health history every time,
+so a daily 880 MB round trip is not a workflow. Set up the Shortcut above for ongoing data.
+
+**Import it on a computer, not the phone.** The scanner is size-agnostic, but mobile Safari caps
+tab memory at roughly 200–400 MB and will kill the page before the file is even handed over. Open
+the app on a Mac or PC, import there once, and it's done. VitalSync warns you rather than crashing
+if you try it on a phone with a file over 250 MB.
+
 The catch is size — a few years of Apple Watch data is routinely 200 MB to over 1 GB, which is why
 most tools won't touch it. VitalSync reads it in 4 MB slices with a streaming scanner
 ([`src/lib/appleHealthXml.js`](src/lib/appleHealthXml.js)), so memory stays flat no matter how big
-the file is. A 251 MB export with 1.4 million records parses in well under a second.
+the file is. Measured: a **1.14 GB export with 4,844,448 records parses in 3.1 seconds** with no
+net heap growth.
 
 It extracts HRV, resting heart rate, SpO₂, wrist temperature, steps and active energy (summing the
 hundreds of per-day samples rather than averaging them), and reconstructs sleep by summing the
@@ -375,6 +418,11 @@ Re-importing is always safe: daily rows upsert on date, and workouts deduplicate
 workout UUID.
 
 ### What the endpoint accepts
+
+**Body formats:** JSON, `application/x-www-form-urlencoded`, `multipart/form-data`, or plain query
+parameters — `POST /health-sync?hrv=48.9&resting_hr=53` works on its own. The form and query
+support exists so an iOS Shortcut can send data through its own key/value UI without composing
+JSON by hand.
 
 Field names are matched loosely — `heart_rate_variability`, `hrv_sdnn` and `hrv` all work — and
 values outside physiological ranges are dropped rather than stored, because one bad reading poisons

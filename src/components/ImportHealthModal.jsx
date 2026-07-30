@@ -53,6 +53,23 @@ export default function ImportHealthModal({ open, onClose }) {
 
     try {
       if (await looksLikeAppleHealthXml(file)) {
+        // The scanner itself is size-agnostic (1.1 GB parses in ~3s with flat
+        // memory), but mobile Safari caps tab memory around 200-400 MB and
+        // kills the page before the file is even handed over. Say so up front
+        // rather than letting the browser die silently.
+        const isMobile = /iPhone|iPad|iPod|Android/i.test(navigator.userAgent);
+        if (isMobile && file.size > 250 * 1e6) {
+          setResult({
+            ok: false,
+            message:
+              `That export is ${(file.size / 1e6).toFixed(0)} MB, which mobile Safari cannot hold ` +
+              `in memory — it will kill the tab before the file is read. Open VitalSync on a ` +
+              `computer and import it there; it only needs doing once. For daily data, use the ` +
+              `Shortcut automation instead of exporting again.`,
+          });
+          return;
+        }
+
         // Streamed in slices — a multi-gigabyte export must never be read into
         // memory or dropped into the textarea.
         setText('');
