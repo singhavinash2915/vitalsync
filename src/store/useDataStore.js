@@ -19,20 +19,48 @@ const WINDOW_DAYS = 120;
 const SLEEP_COLUMNS = ['duration_hours', 'quality_rating', 'bedtime', 'wake_time'];
 
 /**
- * Columns declared `integer` in Postgres. Enforced here as well as in each
- * parser: a decimal reaching one of these aborts the whole import with
- * `22P02 invalid input syntax for type integer`, and a single new data source
- * getting it wrong shouldn't be able to break the write path.
+ * The database's own column rules, mirrored here so a bad value is dropped
+ * before it can abort a 2,400-row batch. Postgres rejects the *whole* upsert
+ * for one offending cell, so validating per-cell on the way out turns a total
+ * failure into one missing number.
+ *
+ * `int` matches the `integer` columns (22P02 otherwise); min/max mirror the
+ * CHECK constraints in 0001_init.sql (23514 otherwise).
  */
-const INTEGER_COLUMNS = new Set([
-  'resting_hr',
-  'active_calories',
-  'steps',
-  'quality_rating',
-  'duration_mins',
-  'intensity',
-  'calories_burned',
-]);
+const COLUMN_RULES = {
+  hrv: { min: 1, max: 400 },
+  resting_hr: { min: 25, max: 150, int: true },
+  spo2: { min: 50, max: 100 },
+  body_temp: { min: 30, max: 45 },
+  active_calories: { min: 0, max: 20000, int: true },
+  steps: { min: 0, max: 200000, int: true },
+  duration_hours: { min: 0, max: 24 },
+  quality_rating: { min: 1, max: 5, int: true },
+  duration_mins: { min: 1, max: 1440, int: true },
+  intensity: { min: 1, max: 10, int: true },
+  calories_burned: { min: 0, max: 20000, int: true },
+};
+
+/**
+ * Returns a value safe for `column`, or null.
+ *
+ * The null check is load-bearing and was the source of a real bug: `Number(null)`
+ * is 0 and `Number.isFinite(0)` is true, so an earlier version of this rounded
+ * every absent integer to 0 — which silently wrote fake zero step counts and
+ * blew up on resting_hr, whose CHECK starts at 25.
+ */
+function sanitiseValue(column, value) {
+  if (value === null || value === undefined || value === '') return null;
+
+  const rules = COLUMN_RULES[column];
+  if (!rules) return value; // text columns (notes, type, bedtime…) pass through
+
+  const number = Number(value);
+  if (!Number.isFinite(number)) return null;
+  if (number < rules.min || number > rules.max) return null;
+
+  return rules.int ? Math.round(number) : number;
+}
 
 const byDateDesc = (a, b) => (a.date < b.date ? 1 : a.date > b.date ? -1 : 0);
 
@@ -292,11 +320,7 @@ export const useDataStore = create((set, get) => ({
     const buildRow = (columns, { date, values, existing }) => {
       const row = { user_id: userId, date, source: 'import' };
       for (const column of columns) {
-        const value = values?.[column] ?? existing?.[column] ?? null;
-        row[column] =
-          INTEGER_COLUMNS.has(column) && Number.isFinite(Number(value))
-            ? Math.round(Number(value))
-            : value;
+        row[column] = sanitiseValue(column, values?.[column] ?? existing?.[column] ?? null);
       }
       return row;
     };
