@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
   Plus,
@@ -23,28 +23,56 @@ import { ScoreRing, ScoreBar } from '../components/ScoreRing';
 import { Card, CardHeader, CardBody, Button, Skeleton, EmptyState, Badge } from '../components/ui';
 import { InsightsList, WeeklySummaryCard, PersonalRecordsCard } from '../components/InsightsPanel';
 import { SyncStrip } from '../components/SyncStatus';
+import { Sparkline, TrendDelta } from '../components/Sparkline';
+import ScoreDetailSheet from '../components/ScoreDetailSheet';
 
-/** Small metric tile used in the "Today" grid. */
-function MetricTile({ icon: Icon, label, value, unit, hint, tone = 'accent' }) {
+/**
+ * A metric tile that interprets rather than just reports: the value, how it
+ * compares to your own baseline, and the shape of the last two weeks.
+ */
+function MetricTile({
+  icon: Icon,
+  label,
+  value,
+  unit,
+  hint,
+  tone = 'accent',
+  trend = [],
+  raw,
+  baseline,
+  goodDirection = 'up',
+  color,
+}) {
   const empty = value === null || value === undefined || value === '';
+  const accent = color ?? (tone === 'accent' ? '#38bdf8' : '#ef4444');
+
   return (
     <div
-      className="rounded-xl border p-3"
+      className="rounded-xl border p-3 transition-colors"
       style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}
     >
       <div className="mb-1.5 flex items-center gap-1.5">
-        <Icon
-          size={13}
-          aria-hidden="true"
-          className={tone === 'accent' ? 'text-accent' : 'text-score-poor'}
-        />
+        <Icon size={13} aria-hidden="true" style={{ color: accent }} />
         <span className="muted text-[10px] uppercase tracking-wide">{label}</span>
       </div>
-      <p className="text-lg font-bold leading-none tabular-nums">
-        {empty ? <span className="muted text-base">—</span> : value}
-        {!empty && unit ? <span className="muted ml-0.5 text-[11px] font-normal">{unit}</span> : null}
-      </p>
-      {hint ? <p className="muted mt-1 text-[10px]">{hint}</p> : null}
+
+      <div className="flex items-end justify-between gap-2">
+        <div className="min-w-0">
+          <p className="text-lg font-bold leading-none tabular-nums">
+            {empty ? <span className="muted text-base">—</span> : value}
+            {!empty && unit ? (
+              <span className="muted ml-0.5 text-[11px] font-normal">{unit}</span>
+            ) : null}
+          </p>
+          <div className="mt-1 flex items-center gap-1.5">
+            <TrendDelta value={raw} baseline={baseline} goodDirection={goodDirection} />
+            {hint ? <span className="muted truncate text-[10px]">{hint}</span> : null}
+          </div>
+        </div>
+        {trend.filter((v) => v !== null).length > 1 ? (
+          <Sparkline values={trend} color={accent} width={52} height={22} />
+        ) : null}
+      </div>
     </div>
   );
 }
@@ -60,6 +88,7 @@ function DashboardSkeleton() {
 }
 
 export default function Dashboard() {
+  const [detail, setDetail] = useState(null);
   const profile = useAuthStore((s) => s.profile);
   const loading = useDataStore((s) => s.loading);
   const health = useDataStore((s) => s.health);
@@ -123,6 +152,31 @@ export default function Dashboard() {
     [health, sleepLogs, workoutLogs, scores]
   );
 
+  // Last 14 days per metric, oldest first, nulls preserved so gaps stay gaps.
+  const trends = useMemo(() => {
+    const days = [];
+    for (let i = 13; i >= 0; i--) {
+      const d = new Date();
+      d.setDate(d.getDate() - i);
+      days.push(
+        `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, '0')}-${String(d.getDate()).padStart(2, '0')}`
+      );
+    }
+    const byDate = new Map(health.map((r) => [r.date, r]));
+    const sleepByDate = new Map(sleepLogs.map((r) => [r.date, r]));
+    const pick = (key, map = byDate) => days.map((d) => map.get(d)?.[key] ?? null);
+
+    return {
+      hrv: pick('hrv'),
+      resting_hr: pick('resting_hr'),
+      steps: pick('steps'),
+      active_calories: pick('active_calories'),
+      spo2: pick('spo2'),
+      body_temp: pick('body_temp'),
+      sleep: pick('duration_hours', sleepByDate),
+    };
+  }, [health, sleepLogs]);
+
   if (loading) return <DashboardSkeleton />;
 
   const readiness = computed.readiness_score;
@@ -145,12 +199,15 @@ export default function Dashboard() {
             </h1>
           </div>
 
-          <ScoreRing
-            value={readiness}
-            size={172}
-            stroke={14}
-            sublabel="Readiness"
-          />
+          <button
+            onClick={() => setDetail('readiness')}
+            className="rounded-full transition-transform active:scale-[.97]"
+            aria-label="How today's readiness was calculated"
+          >
+            <ScoreRing value={readiness} size={172} stroke={14} sublabel="Readiness" />
+          </button>
+
+          <p className="muted mt-2 text-[10px]">Tap any ring to see how it was calculated</p>
 
           <p
             className="mt-3 max-w-xs text-center text-xs leading-relaxed"
@@ -179,16 +236,32 @@ export default function Dashboard() {
           className="grid grid-cols-3 gap-2 border-t px-3 py-4"
           style={{ borderColor: 'var(--border)' }}
         >
-          <ScoreRing value={computed.recovery_score} size={82} stroke={8} label="Recovery" />
-          <ScoreRing value={computed.sleep_score} size={82} stroke={8} label="Sleep" />
-          <ScoreRing
-            value={computed.exertion_score}
-            size={82}
-            stroke={8}
-            label="Exertion"
-            color="#a855f7"
-            statusLabel={exertionLabel(computed.exertion_score)}
-          />
+          {[
+            { key: 'recovery', label: 'Recovery', value: computed.recovery_score },
+            { key: 'sleep', label: 'Sleep', value: computed.sleep_score },
+            {
+              key: 'exertion',
+              label: 'Exertion',
+              value: computed.exertion_score,
+              color: '#a855f7',
+              statusLabel: exertionLabel(computed.exertion_score),
+            },
+          ].map((ring) => (
+            <button
+              key={ring.key}
+              onClick={() => setDetail(ring.key)}
+              className="rounded-xl py-1 transition-transform active:scale-95"
+            >
+              <ScoreRing
+                value={ring.value}
+                size={82}
+                stroke={8}
+                label={ring.label}
+                color={ring.color}
+                statusLabel={ring.statusLabel}
+              />
+            </button>
+          ))}
         </div>
       </Card>
 
@@ -212,11 +285,10 @@ export default function Dashboard() {
             label="HRV"
             value={dayHealth?.hrv ?? null}
             unit="ms"
-            hint={
-              computed.breakdown.baselines.hrv
-                ? `7d avg ${computed.breakdown.baselines.hrv}`
-                : 'building baseline'
-            }
+            raw={dayHealth?.hrv}
+            baseline={computed.breakdown.baselines.hrv}
+            trend={trends.hrv}
+            hint={computed.breakdown.baselines.hrv ? 'vs 60d' : 'building baseline'}
           />
           <MetricTile
             icon={Heart}
@@ -224,36 +296,53 @@ export default function Dashboard() {
             value={dayHealth?.resting_hr ?? null}
             unit="bpm"
             tone="poor"
-            hint={
-              computed.breakdown.baselines.restingHr
-                ? `7d avg ${computed.breakdown.baselines.restingHr}`
-                : 'building baseline'
-            }
+            raw={dayHealth?.resting_hr}
+            baseline={computed.breakdown.baselines.restingHr}
+            goodDirection="down"
+            trend={trends.resting_hr}
+            hint={computed.breakdown.baselines.restingHr ? 'vs 60d' : 'building baseline'}
           />
           <MetricTile
             icon={Moon}
             label="Sleep"
             value={daySleep?.duration_hours ? formatHours(daySleep.duration_hours) : null}
-            hint={daySleep?.quality_rating ? `quality ${daySleep.quality_rating}/5` : 'not logged'}
+            raw={daySleep?.duration_hours}
+            baseline={computed.breakdown.baselines.sleep}
+            trend={trends.sleep}
+            color="#818cf8"
+            hint={daySleep?.quality_rating ? `rated ${daySleep.quality_rating}/5` : 'not rated'}
           />
           <MetricTile
             icon={Flame}
             label="Active cal"
             value={dayHealth?.active_calories?.toLocaleString() ?? null}
             unit="kcal"
+            raw={dayHealth?.active_calories}
+            baseline={computed.breakdown.exertion.target}
+            trend={trends.active_calories}
+            color="#f97316"
             hint={`target ${computed.breakdown.exertion.target}`}
           />
           <MetricTile
             icon={Footprints}
             label="Steps"
             value={dayHealth?.steps?.toLocaleString() ?? null}
+            trend={trends.steps}
+            color="#22c55e"
           />
-          <MetricTile icon={Droplets} label="SpO₂" value={dayHealth?.spo2 ?? null} unit="%" />
+          <MetricTile
+            icon={Droplets}
+            label="SpO₂"
+            value={dayHealth?.spo2 ?? null}
+            unit="%"
+            trend={trends.spo2}
+          />
           <MetricTile
             icon={Thermometer}
             label="Body temp"
             value={dayHealth?.body_temp ?? null}
             unit="°C"
+            trend={trends.body_temp}
           />
           <MetricTile
             icon={Dumbbell}
@@ -350,6 +439,16 @@ export default function Dashboard() {
           ))}
         </CardBody>
       </Card>
+
+      <ScoreDetailSheet
+        open={Boolean(detail)}
+        onClose={() => setDetail(null)}
+        metric={detail}
+        computed={computed}
+        health={dayHealth}
+        sleep={daySleep}
+        workouts={dayWorkouts}
+      />
 
       {!health.length && !sleepLogs.length ? (
         <Card delay={280}>

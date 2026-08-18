@@ -1,4 +1,4 @@
-import { mean, bandFor } from './scores';
+import { mean, bandFor, BASELINE_DAYS, MIN_BASELINE_DAYS } from './scores';
 import { formatHours, relativeDay } from './dates';
 
 /**
@@ -13,9 +13,20 @@ const pct = (a, b) => (b ? ((a - b) / b) * 100 : 0);
 export function buildInsights({ today, history = [], sleepToday, sleepHistory = [], workouts = [] }) {
   const insights = [];
 
-  const hrvBaseline = mean(history.slice(0, 7).map((r) => r.hrv));
-  const rhrBaseline = mean(history.slice(0, 7).map((r) => r.resting_hr));
-  const sleepBaseline = mean(sleepHistory.slice(0, 7).map((r) => r.duration_hours));
+  // Must match the window the scores themselves use. These sentences quote the
+  // baseline back at you, so a 7-day figure here beside a 60-day score on the
+  // same screen is worse than saying nothing.
+  const baseline = (rows, key) => {
+    const values = rows
+      .slice(0, BASELINE_DAYS)
+      .map((r) => r?.[key])
+      .filter((v) => v !== null && v !== undefined && Number.isFinite(Number(v)));
+    return values.length < MIN_BASELINE_DAYS ? null : mean(values);
+  };
+
+  const hrvBaseline = baseline(history, 'hrv');
+  const rhrBaseline = baseline(history, 'resting_hr');
+  const sleepBaseline = baseline(sleepHistory, 'duration_hours');
 
   // --- HRV vs baseline ------------------------------------------------------
   if (Number.isFinite(today?.hrv) && Number.isFinite(hrvBaseline)) {
@@ -25,8 +36,8 @@ export function buildInsights({ today, history = [], sleepToday, sleepHistory = 
         priority: 2,
         tone: 'good',
         icon: 'trending-up',
-        title: 'HRV above your 7-day average',
-        body: `${Math.round(today.hrv)}ms vs a ${hrvBaseline.toFixed(0)}ms baseline (+${delta.toFixed(0)}%). Your nervous system is well recovered — a good day to train hard.`,
+        title: 'HRV above your baseline',
+        body: `${Math.round(today.hrv)}ms against your ${hrvBaseline.toFixed(0)}ms 60-day baseline (+${delta.toFixed(0)}%). Your nervous system is well recovered — a good day to train hard.`,
       });
     } else if (delta <= -12) {
       insights.push({
@@ -42,7 +53,7 @@ export function buildInsights({ today, history = [], sleepToday, sleepHistory = 
         tone: 'neutral',
         icon: 'activity',
         title: 'HRV is holding steady',
-        body: `${Math.round(today.hrv)}ms, in line with your ${hrvBaseline.toFixed(0)}ms baseline. Normal training is fine.`,
+        body: `${Math.round(today.hrv)}ms, in line with your ${hrvBaseline.toFixed(0)}ms 60-day baseline. Normal training is fine.`,
       });
     }
   }
@@ -56,7 +67,7 @@ export function buildInsights({ today, history = [], sleepToday, sleepHistory = 
         tone: 'bad',
         icon: 'heart',
         title: 'Resting heart rate is elevated',
-        body: `${Math.round(today.resting_hr)} bpm, ${delta.toFixed(0)} above your baseline. Elevated RHR often shows up a day before you feel run down — prioritise sleep and hydration.`,
+        body: `${Math.round(today.resting_hr)} bpm, ${delta.toFixed(0)} above your 60-day baseline. Elevated RHR often shows up a day before you feel run down — prioritise sleep and hydration.`,
       });
     } else if (delta <= -3) {
       insights.push({
@@ -129,7 +140,7 @@ export function buildInsights({ today, history = [], sleepToday, sleepHistory = 
       tone: 'neutral',
       icon: 'sparkles',
       title: 'Log your first few days',
-      body: 'Baselines need about 7 days of HRV and resting heart rate before insights get personal. Add today’s numbers to get started.',
+      body: `Baselines need at least ${MIN_BASELINE_DAYS} days of HRV and resting heart rate before insights get personal, and settle over ${BASELINE_DAYS}. Add today’s numbers to get started.`,
     });
   }
 
