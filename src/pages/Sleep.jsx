@@ -30,6 +30,7 @@ import {
   Skeleton,
 } from '../components/ui';
 import ChartTooltip from '../components/ChartTooltip';
+import SleepStages from '../components/SleepStages';
 
 const QUALITY_LABELS = ['Terrible', 'Poor', 'OK', 'Good', 'Excellent'];
 
@@ -70,6 +71,9 @@ export default function Sleep() {
   const preview = calcSleepScore({
     durationHours: effectiveHours,
     qualityRating: form.quality_rating,
+    stages: existing
+      ? { deep_hours: existing.deep_hours, rem_hours: existing.rem_hours, awake_hours: existing.awake_hours }
+      : null,
   });
 
   const chartData = useMemo(
@@ -152,6 +156,8 @@ export default function Sleep() {
           </div>
         </div>
       </Card>
+
+      <SleepStages night={existing} />
 
       <Card delay={60}>
         <CardHeader title="Log sleep" subtitle="Last night, or any past night" icon={BedDouble} />

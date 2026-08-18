@@ -281,7 +281,25 @@ function parseMetrics(metrics: any[]) {
 
       let raw = point?.qty ?? point?.Avg ?? point?.avg ?? point?.value ?? point?.total;
       // Sleep samples have no `qty` and need their own extraction — see above.
-      if (column === 'sleep_hours') raw = extractSleepHours(point);
+      if (column === 'sleep_hours') {
+        raw = extractSleepHours(point);
+        // Stages ride along on the same sample rather than arriving as their
+        // own metrics, and they are what makes an objective quality score
+        // possible for anyone who never rates a night by hand.
+        const stages: Record<string, unknown> = {
+          deep_hours: point?.deep,
+          rem_hours: point?.rem,
+          core_hours: point?.core ?? point?.light,
+          awake_hours: point?.awake,
+          in_bed_hours: point?.inBed,
+        };
+        for (const [key, v] of Object.entries(stages)) {
+          const n = Number(v);
+          if (Number.isFinite(n) && n > 0 && n <= 24) {
+            addValue(byDate, counts, date, key, Math.round(n * 100) / 100);
+          }
+        }
+      }
 
       let value = typeof raw === 'string' ? Number(raw) : raw;
       value = column === 'sleep_hours' ? normaliseSleep(value, units) : convertUnits(column, value, units);
@@ -468,18 +486,27 @@ Deno.serve(async (req: Request) => {
   const healthRows: Record<string, unknown>[] = [];
   const sleepRows: Record<string, unknown>[] = [];
 
+  const SLEEP_STAGE_KEYS = ['deep_hours', 'rem_hours', 'core_hours', 'awake_hours', 'in_bed_hours'];
+
   for (const [date, values] of byDate) {
-    const { sleep_hours, sleep_quality, ...health } = values;
+    const { sleep_hours, sleep_quality, ...rest } = values;
+    const health: Record<string, number> = {};
+    const stageValues: Record<string, number> = {};
+    for (const [key, v] of Object.entries(rest)) {
+      if (SLEEP_STAGE_KEYS.includes(key)) stageValues[key] = v;
+      else health[key] = v;
+    }
     if (Object.keys(health).length) {
       healthRows.push({ user_id: userId, date, source: 'health-sync', ...health });
     }
-    if (sleep_hours !== undefined || sleep_quality !== undefined) {
+    if (sleep_hours !== undefined || sleep_quality !== undefined || Object.keys(stageValues).length) {
       sleepRows.push({
         user_id: userId,
         date,
         source: 'health-sync',
         ...(sleep_hours !== undefined ? { duration_hours: sleep_hours } : {}),
         ...(sleep_quality !== undefined ? { quality_rating: sleep_quality } : {}),
+        ...stageValues,
       });
     }
   }

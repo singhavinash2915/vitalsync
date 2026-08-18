@@ -186,7 +186,53 @@ export function sleepDurationScore(hours) {
 }
 
 /**
- * Sleep Score = 60% duration + 40% self-rated quality (1-5 → 20-100).
+ * Objective sleep quality from the stage breakdown, 0-100.
+ *
+ * The self-rating is 40% of the sleep score and almost nobody fills it in, so
+ * for anyone syncing from a watch that half of the score sat permanently
+ * unused. The stages answer the same question better than memory does.
+ *
+ * Three components, against adult norms:
+ *   deep       13-23% of the night is healthy; scored against 15%
+ *   REM        20-25% is healthy; scored against 20%
+ *   efficiency asleep / (asleep + awake) — 95%+ is excellent, 80% is poor
+ *
+ * Deep is weighted hardest because it is the stage that tracks physical
+ * recovery. Returns null unless there is enough of a breakdown to be honest.
+ */
+export function sleepQualityFromStages({ duration_hours, deep_hours, rem_hours, awake_hours } = {}) {
+  const total = Number(duration_hours);
+  if (!Number.isFinite(total) || total <= 0) return null;
+
+  const deep = Number(deep_hours);
+  const rem = Number(rem_hours);
+  if (!Number.isFinite(deep) && !Number.isFinite(rem)) return null;
+
+  const parts = [];
+
+  if (Number.isFinite(deep)) {
+    parts.push({ value: clamp((deep / total / 0.15) * 100, 0, 100), weight: 0.4 });
+  }
+  if (Number.isFinite(rem)) {
+    parts.push({ value: clamp((rem / total / 0.2) * 100, 0, 100), weight: 0.35 });
+  }
+  if (Number.isFinite(Number(awake_hours))) {
+    const efficiency = total / (total + Number(awake_hours));
+    // 80% efficiency scores 0, 100% scores 100 — below 80 is broken sleep.
+    parts.push({ value: clamp(((efficiency - 0.8) / 0.2) * 100, 0, 100), weight: 0.25 });
+  }
+
+  const weight = parts.reduce((sum, p) => sum + p.weight, 0);
+  if (!weight) return null;
+
+  return round(parts.reduce((sum, p) => sum + p.value * p.weight, 0) / weight);
+}
+
+/**
+ * Sleep Score = 60% duration + 40% quality.
+ *
+ * Quality prefers your own rating when you gave one, and falls back to the
+ * stage-derived figure otherwise.
  *
  * Returns a null score when nothing was logged. That distinction matters:
  * "I didn't record my sleep" is not the same claim as "I slept terribly", and
@@ -196,16 +242,17 @@ export function sleepDurationScore(hours) {
  * When only one half is present the score uses that half alone rather than
  * treating the missing one as zero.
  */
-export function calcSleepScore({ durationHours, qualityRating } = {}) {
+export function calcSleepScore({ durationHours, qualityRating, stages } = {}) {
   const hasDuration = Number(durationHours) > 0;
   const hasQuality = Number.isFinite(Number(qualityRating)) && Number(qualityRating) > 0;
+  const derived = stages ? sleepQualityFromStages({ duration_hours: durationHours, ...stages }) : null;
 
-  if (!hasDuration && !hasQuality) {
+  if (!hasDuration && !hasQuality && derived === null) {
     return { score: null, breakdown: { duration: null, quality: null, logged: false } };
   }
 
   const duration = hasDuration ? sleepDurationScore(durationHours) : null;
-  const quality = hasQuality ? clamp((Number(qualityRating) / 5) * 100, 0, 100) : null;
+  const quality = hasQuality ? clamp((Number(qualityRating) / 5) * 100, 0, 100) : derived;
 
   let score;
   if (duration !== null && quality !== null) score = duration * 0.6 + quality * 0.4;
@@ -216,6 +263,7 @@ export function calcSleepScore({ durationHours, qualityRating } = {}) {
     breakdown: {
       duration: duration === null ? null : round(duration),
       quality: quality === null ? null : round(quality),
+      qualitySource: hasQuality ? 'rated' : derived !== null ? 'stages' : null,
       logged: true,
     },
   };
@@ -377,6 +425,13 @@ export function computeDailyScores({
   const sleepScore = calcSleepScore({
     durationHours: sleep?.duration_hours,
     qualityRating: sleep?.quality_rating,
+    stages: sleep
+      ? {
+          deep_hours: sleep.deep_hours,
+          rem_hours: sleep.rem_hours,
+          awake_hours: sleep.awake_hours,
+        }
+      : null,
   });
 
   // Exertion is only meaningful if we know something about the day's output.

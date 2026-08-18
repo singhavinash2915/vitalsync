@@ -16,7 +16,17 @@ import { subDays } from 'date-fns';
 const WINDOW_DAYS = 120;
 
 /** Written on every imported sleep row so the key sets stay uniform. */
-const SLEEP_COLUMNS = ['duration_hours', 'quality_rating', 'bedtime', 'wake_time'];
+const SLEEP_COLUMNS = [
+  'duration_hours',
+  'quality_rating',
+  'bedtime',
+  'wake_time',
+  'deep_hours',
+  'rem_hours',
+  'core_hours',
+  'awake_hours',
+  'in_bed_hours',
+];
 
 /**
  * The database's own column rules, mirrored here so a bad value is dropped
@@ -35,6 +45,11 @@ const COLUMN_RULES = {
   active_calories: { min: 0, max: 20000, int: true },
   steps: { min: 0, max: 200000, int: true },
   duration_hours: { min: 0, max: 24 },
+  deep_hours: { min: 0, max: 24 },
+  rem_hours: { min: 0, max: 24 },
+  core_hours: { min: 0, max: 24 },
+  awake_hours: { min: 0, max: 24 },
+  in_bed_hours: { min: 0, max: 24 },
   quality_rating: { min: 1, max: 5, int: true },
   duration_mins: { min: 1, max: 1440, int: true },
   intensity: { min: 1, max: 10, int: true },

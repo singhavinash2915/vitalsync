@@ -84,7 +84,15 @@ export const RANGES = {
 };
 
 const INTEGER_COLUMNS = new Set(['resting_hr', 'active_calories', 'steps', 'sleep_quality']);
-const SLEEP_COLUMNS = new Set(['sleep_hours', 'sleep_quality']);
+const SLEEP_COLUMNS = new Set([
+  'sleep_hours',
+  'sleep_quality',
+  'deep_hours',
+  'rem_hours',
+  'core_hours',
+  'awake_hours',
+  'in_bed_hours',
+]);
 
 /**
  * Unit normalisation — the single most important step in this file.
@@ -177,6 +185,21 @@ export function coerce(column, raw) {
  * legacy fields. Zero is treated as absent throughout, since a sleep record
  * that genuinely means "no sleep" is not worth storing either.
  */
+export function extractSleepStages(point) {
+  const num = (v) => {
+    const n = Number(v);
+    return Number.isFinite(n) && n > 0 ? n : null;
+  };
+  const stages = {
+    deep_hours: num(point?.deep),
+    rem_hours: num(point?.rem),
+    core_hours: num(point?.core ?? point?.light),
+    awake_hours: num(point?.awake),
+    in_bed_hours: num(point?.inBed),
+  };
+  return Object.values(stages).some((v) => v !== null) ? stages : null;
+}
+
 function extractSleepHours(point) {
   const num = (v) => {
     const n = Number(v);
@@ -277,6 +300,16 @@ function parseMetricsEnvelope(node, acc) {
       }
 
       addValue(acc, date, column, clean);
+
+      // Stages ride along with the same sample; they are not separate metrics.
+      if (column === 'sleep_hours') {
+        const stages = extractSleepStages(point);
+        if (stages) {
+          for (const [key, v] of Object.entries(stages)) {
+            if (v !== null) addValue(acc, date, key, Math.round(v * 100) / 100);
+          }
+        }
+      }
     }
   }
 }
@@ -502,11 +535,13 @@ export function parseHealthExport(input) {
       const sleep = {};
 
       for (const [column, value] of Object.entries(values)) {
-        if (SLEEP_COLUMNS.has(column)) {
-          sleep[column === 'sleep_hours' ? 'duration_hours' : 'quality_rating'] = value;
-        } else {
+        if (!SLEEP_COLUMNS.has(column)) {
           health[column] = value;
+          continue;
         }
+        if (column === 'sleep_hours') sleep.duration_hours = value;
+        else if (column === 'sleep_quality') sleep.quality_rating = value;
+        else sleep[column] = value;
       }
 
       return {

@@ -40,6 +40,15 @@ const ASLEEP_VALUES = new Set([
   'HKCategoryValueSleepAnalysisAsleepREM',
 ]);
 
+/** Which column each sleep segment contributes its duration to. */
+const SLEEP_STAGE_COLUMNS = {
+  HKCategoryValueSleepAnalysisAsleepCore: 'core_hours',
+  HKCategoryValueSleepAnalysisAsleepDeep: 'deep_hours',
+  HKCategoryValueSleepAnalysisAsleepREM: 'rem_hours',
+  HKCategoryValueSleepAnalysisAwake: 'awake_hours',
+  HKCategoryValueSleepAnalysisInBed: 'in_bed_hours',
+};
+
 /**
  * Columns Postgres declares as `integer`. A daily mean or sum lands on a
  * decimal far more often than not — averaging resting heart rate, or summing
@@ -109,6 +118,7 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
   const totals = new Map(); // date -> { column: { sum, count } }
   const sourceTotals = new Map(); // date -> { column: { source: total } }
   const sleepByDate = new Map(); // date -> hours asleep
+  const stagesByDate = new Map(); // date -> { deep_hours, rem_hours, ... }
   let recordsSeen = 0;
 
   const add = (date, column, value, source) => {
@@ -164,7 +174,10 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
 
       if (type === 'HKCategoryTypeIdentifierSleepAnalysis') {
         const state = attr(tag, 'value');
-        if (!ASLEEP_VALUES.has(state)) continue;
+        const stageColumn = SLEEP_STAGE_COLUMNS[state];
+        // Awake and InBed are tracked but do NOT count toward time asleep.
+        if (!ASLEEP_VALUES.has(state) && !stageColumn) continue;
+
         const start = parseTimestamp(attr(tag, 'startDate'));
         const end = parseTimestamp(attr(tag, 'endDate'));
         if (!Number.isFinite(start) || !Number.isFinite(end) || end <= start) continue;
@@ -174,7 +187,15 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
         const date = dayOf(attr(tag, 'endDate'));
         if (!date) continue;
         const hours = (end - start) / 3_600_000;
-        sleepByDate.set(date, (sleepByDate.get(date) ?? 0) + hours);
+
+        if (ASLEEP_VALUES.has(state)) {
+          sleepByDate.set(date, (sleepByDate.get(date) ?? 0) + hours);
+        }
+        if (stageColumn) {
+          const night = stagesByDate.get(date) ?? {};
+          night[stageColumn] = (night[stageColumn] ?? 0) + hours;
+          stagesByDate.set(date, night);
+        }
         continue;
       }
 
@@ -202,6 +223,7 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
     ...totals.keys(),
     ...sourceTotals.keys(),
     ...sleepByDate.keys(),
+    ...stagesByDate.keys(),
   ]);
 
   for (const date of [...allDates].sort()) {
@@ -233,7 +255,16 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
 
     const hours = sleepByDate.get(date);
     // Under 45 minutes is a nap or a mis-detection, not a night.
-    const sleep = hours && hours >= 0.75 ? { duration_hours: Math.round(hours * 100) / 100 } : null;
+    let sleep = null;
+    if (hours && hours >= 0.75) {
+      sleep = { duration_hours: Math.round(hours * 100) / 100 };
+      const stages = stagesByDate.get(date);
+      if (stages) {
+        for (const [key, v] of Object.entries(stages)) {
+          if (v > 0) sleep[key] = Math.round(v * 100) / 100;
+        }
+      }
+    }
 
     if (Object.keys(health).length || sleep) {
       days.push({ date, health: Object.keys(health).length ? health : null, sleep });
