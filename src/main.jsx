@@ -20,6 +20,19 @@ createRoot(document.getElementById('root')).render(
   </StrictMode>
 );
 
+/**
+ * The Supabase session lives in localStorage, and iOS clears that for sites
+ * not opened for about a week — which is precisely why a personal app you
+ * check every few days keeps asking you to sign in again. Requesting
+ * persistent storage exempts us from that eviction. Installed PWAs are granted
+ * it silently; in a browser tab it may be refused, which is harmless.
+ */
+if (navigator.storage?.persist) {
+  navigator.storage.persisted().then((already) => {
+    if (!already) navigator.storage.persist().catch(() => {});
+  });
+}
+
 // autoUpdate: a new deploy activates on the next navigation. Reloading here
 // keeps a long-lived standalone PWA session from running stale code for days.
 const updateSW = registerSW({

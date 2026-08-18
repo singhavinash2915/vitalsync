@@ -143,7 +143,7 @@ export default function Biomarkers() {
                     {marker.key === 'weight_kg'
                       ? 'needs a connected scale, or log it in Health'
                       : marker.key === 'spo2'
-                        ? 'enable Blood Oxygen on the Watch'
+                        ? 'needs a Watch with a blood oxygen sensor'
                         : 'no readings found'}
                   </span>
                 </li>

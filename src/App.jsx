@@ -35,7 +35,10 @@ function Protected({ children }) {
   const { user, profile, initialising } = useAuthStore();
   const location = useLocation();
 
-  if (initialising) return <FullScreenLoader />;
+  // Restoring a session is a local read plus a token refresh; showing the
+  // login screen during it would make a signed-in user think they had been
+  // signed out.
+  if (initialising) return <FullScreenLoader message="Restoring your session…" />;
   if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
   if (profile && useAuthStore.getState().needsOnboarding() && location.pathname !== '/welcome') {
     return <Navigate to="/welcome" replace />;
