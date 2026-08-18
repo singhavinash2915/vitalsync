@@ -50,7 +50,7 @@ different project.
 | **Sleep** | Bedtime/wake time with auto-calculated duration, quality rating, 14-night bar chart |
 | **Journal** | Habit toggles (alcohol, travel, meditation), stress and diet ratings, notes — with a live readout of the net effect on your recovery score |
 | **Trends** | Seven interactive charts over 7 / 30 / 90 days: recovery, HRV, resting HR, sleep, exertion-vs-recovery, readiness, steps & calories |
-| **Settings** | Profile, calorie target, theme, Apple Health import, sync keys, JSON/CSV export |
+| **Settings** | Profile, calorie target, theme, sync status, Apple Health import, sync keys, JSON/CSV export |
 
 Everything works offline once loaded — the service worker serves the app shell from cache and
 falls back to your last-synced data.
@@ -374,6 +374,18 @@ once it works.
 **4. Test it**
 Run the shortcut manually. You want `{"ok": true, ...}` back. Add a **Show Result** action while
 testing, then delete it.
+
+**5. Confirm it keeps working**
+The dashboard carries a status strip, and Settings has the detail. It reports two different things
+on purpose:
+
+- **Data arrived** — when a row was last *written*. Tells you the automation is alive.
+- **Covers up to** — the newest *date* held. Tells you the data is current.
+
+Either alone can mislead. A shortcut that keeps firing but exports a stale range shows a fresh
+write time with dates falling behind; a shortcut that died looks fine for a day on write time
+alone. The strip turns amber if either goes wrong, and shows an **Auto** badge only when a push has
+genuinely landed in the last 36 hours.
 
 Sleep duration usually comes back in **minutes** or **seconds** — that's fine, the endpoint infers
 the unit from magnitude and converts.

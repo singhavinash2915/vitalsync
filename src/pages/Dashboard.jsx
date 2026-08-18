@@ -22,6 +22,7 @@ import { todayKey, prettyDateLong, formatHours } from '../lib/dates';
 import { ScoreRing, ScoreBar } from '../components/ScoreRing';
 import { Card, CardHeader, CardBody, Button, Skeleton, EmptyState, Badge } from '../components/ui';
 import { InsightsList, WeeklySummaryCard, PersonalRecordsCard } from '../components/InsightsPanel';
+import { SyncStrip } from '../components/SyncStatus';
 
 /** Small metric tile used in the "Today" grid. */
 function MetricTile({ icon: Icon, label, value, unit, hint, tone = 'accent' }) {
@@ -129,6 +130,8 @@ export default function Dashboard() {
 
   return (
     <div className="space-y-4">
+      <SyncStrip />
+
       {/* ---------------- Hero: readiness ---------------- */}
       <Card className="overflow-hidden">
         <div className="flex flex-col items-center px-4 pb-5 pt-6">

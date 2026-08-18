@@ -37,6 +37,7 @@ import {
   Badge,
 } from '../components/ui';
 import ImportHealthModal from '../components/ImportHealthModal';
+import { SyncPanel } from '../components/SyncStatus';
 
 const GOALS = [
   { value: 'performance', label: 'Athletic performance' },
@@ -409,6 +410,18 @@ export default function Settings() {
               { value: 'light', label: 'Light' },
             ]}
           />
+        </CardBody>
+      </Card>
+
+      {/* -------- Sync status -------- */}
+      <Card delay={60}>
+        <CardHeader
+          title="Sync status"
+          subtitle="Whether your data is actually arriving"
+          icon={RefreshCw}
+        />
+        <CardBody>
+          <SyncPanel />
         </CardBody>
       </Card>
 
