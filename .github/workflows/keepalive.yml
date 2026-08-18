@@ -1,0 +1,47 @@
+name: Keep Supabase awake
+
+# Supabase pauses free-tier projects after 7 days without activity, and a
+# paused project stops resolving in DNS entirely — the app simply cannot reach
+# it, and restoring is a manual click in the dashboard. This happened once:
+# 19 quiet days took the project offline with no warning.
+#
+# One cheap read a day is enough to count as activity. Once the Apple Health
+# sync automation is running it keeps the project awake on its own, but this
+# still covers holidays, a dead phone, or a broken shortcut.
+
+on:
+  schedule:
+    # 06:20 UTC daily. Deliberately not on the hour — GitHub's scheduler is
+    # heavily contended at :00 and drops or delays those runs.
+    - cron: '20 6 * * *'
+  workflow_dispatch:
+
+jobs:
+  ping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Ping the database through PostgREST
+        env:
+          URL: ${{ secrets.VITE_SUPABASE_URL }}
+          KEY: ${{ secrets.VITE_SUPABASE_ANON_KEY }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "::error::VITE_SUPABASE_URL / VITE_SUPABASE_ANON_KEY secrets are not set."
+            exit 1
+          fi
+
+          # HEAD against a real table so the request reaches Postgres rather
+          # than being served by the gateway. Row-level security means the anon
+          # key sees nothing, which is fine — we only need the round trip.
+          code=$(curl -s -o /dev/null -w '%{http_code}' -m 30 \
+            -X HEAD "$URL/rest/v1/health_logs?select=id&limit=1" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+
+          echo "PostgREST responded $code"
+
+          # 200/206 = awake. 401/403 = awake and refusing us, which still counts.
+          case "$code" in
+            200|206|401|403) echo "Project is awake."; exit 0 ;;
+            000) echo "::error::No response — the project is most likely PAUSED. Restore it at https://supabase.com/dashboard/project/vbyhumvshwsvbjtpwrmx"; exit 1 ;;
+            *)   echo "::error::Unexpected status $code"; exit 1 ;;
+          esac

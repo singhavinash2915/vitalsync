@@ -611,6 +611,22 @@ build; then check Settings → Rebuild all scores.
 **Recovery is stuck at 50** — that's the neutral fallback when there's no 7-day baseline yet. Log
 HRV and resting HR for about a week.
 
+**Everything stopped working / "Failed to fetch" everywhere** — the Supabase project is probably
+paused. The free tier pauses after 7 days without activity, and a paused project stops resolving in
+DNS entirely, so the app can't reach it at all:
+
+```bash
+nslookup vbyhumvshwsvbjtpwrmx.supabase.co
+# NXDOMAIN  ->  paused.  An address  ->  awake.
+```
+
+Your data is safe. Restore it from
+[the dashboard](https://supabase.com/dashboard/project/vbyhumvshwsvbjtpwrmx) — one click, a couple
+of minutes. To stop it recurring, [`.github/workflows/keepalive.yml`](.github/workflows/keepalive.yml)
+pings the database daily; the Apple Health sync automation also keeps it awake on its own once it's
+running. (GitHub disables scheduled workflows on a repo with no commits for 60 days, so the two
+together are better than either alone.)
+
 **Blank page on GitHub Pages** — `base` doesn't match your repo name. The workflow sets it from
 the repo name automatically; if you built locally, pass `BASE_PATH=/your-repo/`.
 
