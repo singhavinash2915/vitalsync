@@ -12,6 +12,7 @@ const TITLES = {
   '/sleep': 'Sleep',
   '/journal': 'Journal',
   '/trends': 'Trends',
+  '/biology': 'Biology',
   '/log': 'Log health data',
   '/settings': 'Settings',
 };

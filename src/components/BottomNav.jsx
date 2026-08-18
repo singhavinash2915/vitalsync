@@ -1,6 +1,6 @@
 import { NavLink } from 'react-router-dom';
 import clsx from 'clsx';
-import { Home, Dumbbell, Moon, NotebookPen, LineChart } from 'lucide-react';
+import { Home, Dumbbell, Moon, NotebookPen, LineChart, HeartPulse } from 'lucide-react';
 
 const TABS = [
   { to: '/', label: 'Home', icon: Home, end: true },
@@ -8,6 +8,7 @@ const TABS = [
   { to: '/sleep', label: 'Sleep', icon: Moon },
   { to: '/journal', label: 'Journal', icon: NotebookPen },
   { to: '/trends', label: 'Trends', icon: LineChart },
+  { to: '/biology', label: 'Biology', icon: HeartPulse },
 ];
 
 /** Mobile-first bottom tab bar; becomes a left rail from `md` up. */
@@ -29,7 +30,7 @@ export default function BottomNav() {
               end={end}
               className={({ isActive }) =>
                 clsx(
-                  'flex flex-col items-center gap-1 rounded-xl px-2 py-2 text-[10px] font-medium transition-all',
+                  'flex flex-col items-center gap-1 rounded-xl px-1 py-2 text-[9px] font-medium transition-all',
                   'active:scale-95',
                   isActive ? 'text-accent' : 'muted hover:text-[color:var(--text)]'
                 )
@@ -39,7 +40,7 @@ export default function BottomNav() {
                 <>
                   <span
                     className={clsx(
-                      'rounded-lg px-3 py-1 transition-all',
+                      'rounded-lg px-2.5 py-1 transition-all',
                       isActive ? 'bg-accent/15' : 'bg-transparent'
                     )}
                   >

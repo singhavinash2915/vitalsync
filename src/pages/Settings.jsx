@@ -106,6 +106,7 @@ export default function Settings() {
     weight: profile?.weight ?? '',
     height: profile?.height ?? '',
     fitness_goal: profile?.fitness_goal ?? 'performance',
+    sex: profile?.sex ?? '',
     calorie_target: profile?.calorie_target ?? DEFAULT_CALORIE_TARGET,
   });
   const [status, setStatus] = useState({ tone: null, message: '' });
@@ -191,6 +192,7 @@ export default function Settings() {
       weight: form.weight ? Number(form.weight) : null,
       height: form.height ? Number(form.height) : null,
       fitness_goal: form.fitness_goal,
+      sex: form.sex || null,
       calorie_target: Number(form.calorie_target) || DEFAULT_CALORIE_TARGET,
     });
 
@@ -347,6 +349,14 @@ export default function Settings() {
                 />
               </Field>
             </div>
+
+            <Field label="Sex" hint="only used for VO₂ max reference ranges">
+              <Select value={form.sex} onChange={set('sex')}>
+                <option value="">Prefer not to say</option>
+                <option value="male">Male</option>
+                <option value="female">Female</option>
+              </Select>
+            </Field>
 
             <Field label="Primary goal">
               <Select value={form.fitness_goal} onChange={set('fitness_goal')}>

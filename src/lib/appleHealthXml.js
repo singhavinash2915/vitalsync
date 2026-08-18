@@ -29,6 +29,11 @@ const RECORD_TYPES = {
   // Energy and steps arrive as hundreds of small samples per day; they sum.
   HKQuantityTypeIdentifierActiveEnergyBurned: { column: 'active_calories', agg: 'sum' },
   HKQuantityTypeIdentifierStepCount: { column: 'steps', agg: 'sum' },
+  // Biomarkers — measured occasionally, so averaged rather than summed.
+  HKQuantityTypeIdentifierVO2Max: { column: 'vo2_max', agg: 'mean' },
+  HKQuantityTypeIdentifierRespiratoryRate: { column: 'respiratory_rate', agg: 'mean' },
+  HKQuantityTypeIdentifierBodyMass: { column: 'weight_kg', agg: 'mean' },
+  HKQuantityTypeIdentifierHeartRateRecoveryOneMinute: { column: 'cardio_recovery', agg: 'mean' },
 };
 
 /** Sleep states that count as actually asleep. "InBed" deliberately does not. */
@@ -65,6 +70,10 @@ const RANGES = {
   body_temp: [30, 45],
   active_calories: [0, 20000],
   steps: [0, 200000],
+  vo2_max: [10, 100],
+  respiratory_rate: [4, 60],
+  weight_kg: [20, 400],
+  cardio_recovery: [0, 100],
 };
 
 /** Apple writes local wall-clock time, so the first 10 chars are the local day. */
@@ -98,6 +107,10 @@ function normalise(column, value, unit) {
   if (column === 'body_temp') {
     const u = String(unit ?? '').toLowerCase();
     if (u.includes('f') || value > 45) return ((value - 32) * 5) / 9;
+  }
+  if (column === 'weight_kg') {
+    const u = String(unit ?? '').toLowerCase();
+    if (u === 'lb' || u === 'lbs') return value * 0.45359237;
   }
   return value;
 }

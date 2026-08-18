@@ -61,6 +61,17 @@ export const METRIC_ALIASES = {
   steps: 'steps',
   step_count: 'steps',
 
+  // --- Biomarkers ---
+  vo2_max: 'vo2_max',
+  vo2max: 'vo2_max',
+  respiratory_rate: 'respiratory_rate',
+  breathing_rate: 'respiratory_rate',
+  weight: 'weight_kg',
+  weight_body_mass: 'weight_kg',
+  body_mass: 'weight_kg',
+  cardio_recovery: 'cardio_recovery',
+  heart_rate_recovery_one_minute: 'cardio_recovery',
+
   // --- Sleep ---
   sleep_hours: 'sleep_hours',
   sleep_analysis: 'sleep_hours',
@@ -81,6 +92,10 @@ export const RANGES = {
   steps: [0, 200000],
   sleep_hours: [0, 24],
   sleep_quality: [1, 5],
+  vo2_max: [10, 100],
+  respiratory_rate: [4, 60],
+  weight_kg: [20, 400],
+  cardio_recovery: [0, 100],
 };
 
 const INTEGER_COLUMNS = new Set(['resting_hr', 'active_calories', 'steps', 'sleep_quality']);
@@ -123,10 +138,25 @@ export function convertUnits(column, value, units) {
     return value;
   }
 
+  if (column === 'weight_kg' && (unit === 'lb' || unit === 'lbs')) {
+    return value * 0.45359237;
+  }
+
   return value;
 }
 
-export const HEALTH_COLUMNS = ['hrv', 'resting_hr', 'spo2', 'body_temp', 'active_calories', 'steps'];
+export const HEALTH_COLUMNS = [
+  'hrv',
+  'resting_hr',
+  'spo2',
+  'body_temp',
+  'active_calories',
+  'steps',
+  'vo2_max',
+  'respiratory_rate',
+  'weight_kg',
+  'cardio_recovery',
+];
 
 const normaliseKey = (key) =>
   String(key)
