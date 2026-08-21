@@ -379,10 +379,22 @@ Deno.serve(async (req: Request) => {
     db = admin;
 
     // Fire-and-forget usage stamp; a failure here must not fail the sync.
+    // The count was previously written back as the value just read, so it sat
+    // at 0 forever — select it and add one.
     admin
       .from('sync_keys')
-      .update({ last_used_at: new Date().toISOString(), use_count: (keyRow as any).use_count ?? 0 })
+      .select('use_count')
       .eq('id', keyRow.id)
+      .maybeSingle()
+      .then(({ data }) =>
+        admin
+          .from('sync_keys')
+          .update({
+            last_used_at: new Date().toISOString(),
+            use_count: (Number(data?.use_count) || 0) + 1,
+          })
+          .eq('id', keyRow.id)
+      )
       .then(() => {});
   } else if (authHeader.startsWith('Bearer ')) {
     const client = createClient(supabaseUrl, anonKey, {
@@ -533,8 +545,39 @@ Deno.serve(async (req: Request) => {
     results.workout_logs = workoutRows.length;
   }
 
-  // Scores are not computed here: recovery depends on a 7-day rolling baseline
-  // the app already holds in memory, and it recalculates on next open — so the
+  // One snapshot per sync, inputs only. This is what makes an intraday
+  // readiness curve possible: the daily row is overwritten on every sync, so
+  // without this the morning's numbers are gone by evening.
+  const today = new Date().toISOString().slice(0, 10);
+  const todayValues = byDate.get(today);
+  if (todayValues) {
+    const { sleep_hours, ...rest } = todayValues;
+    const snapshot: Record<string, unknown> = {
+      user_id: userId,
+      date: today,
+      source: syncKey ? 'health-sync' : 'manual',
+      hrv: rest.hrv ?? null,
+      resting_hr: rest.resting_hr ?? null,
+      active_calories: rest.active_calories ?? null,
+      steps: rest.steps ?? null,
+      sleep_hours: sleep_hours ?? null,
+    };
+
+    const { error } = await db.from('health_snapshots').insert(snapshot);
+    if (!error) {
+      results.snapshot = true;
+      // Two weeks is plenty for an intraday view and keeps the table small
+      // at eight rows a day.
+      await db
+        .from('health_snapshots')
+        .delete()
+        .eq('user_id', userId)
+        .lt('date', new Date(Date.now() - 14 * 86400000).toISOString().slice(0, 10));
+    }
+  }
+
+  // Scores are not computed here: recovery depends on a rolling baseline the
+  // app already holds in memory, and it recalculates on next open — so the
   // algorithm lives in exactly one place.
   return json({ ok: true, user: userId, ...results });
 });

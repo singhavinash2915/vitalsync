@@ -92,6 +92,7 @@ export const useDataStore = create((set, get) => ({
   workouts: [],
   journal: [],
   scores: [],
+  snapshots: [],
 
   loading: true,
   saving: false,
@@ -105,6 +106,7 @@ export const useDataStore = create((set, get) => ({
       workouts: [],
       journal: [],
       scores: [],
+      snapshots: [],
       loading: true,
       error: null,
       lastSyncedAt: null,
@@ -127,12 +129,19 @@ export const useDataStore = create((set, get) => ({
         .order('date', { ascending: false });
 
     try {
-      const [health, sleep, workouts, journal, scores] = await Promise.all([
+      const [health, sleep, workouts, journal, scores, snapshots] = await Promise.all([
         table('health_logs'),
         table('sleep_logs'),
         table('workout_logs'),
         table('journal_logs'),
         table('scores'),
+        // Intraday points for the "today" curve; a couple of days is plenty.
+        supabase
+          .from('health_snapshots')
+          .select('*')
+          .eq('user_id', userId)
+          .gte('date', toKey(subDays(new Date(), 2)))
+          .order('captured_at', { ascending: true }),
       ]);
 
       const firstError = [health, sleep, workouts, journal, scores].find((r) => r.error)?.error;
@@ -144,6 +153,9 @@ export const useDataStore = create((set, get) => ({
         workouts: workouts.data ?? [],
         journal: journal.data ?? [],
         scores: scores.data ?? [],
+        // A missing snapshots table (migrations not applied) must not break
+        // the whole load — the curve is an extra, not a requirement.
+        snapshots: snapshots.error ? [] : (snapshots.data ?? []),
         loading: false,
         lastSyncedAt: new Date().toISOString(),
       });

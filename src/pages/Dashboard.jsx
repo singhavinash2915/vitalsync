@@ -25,6 +25,7 @@ import { InsightsList, WeeklySummaryCard, PersonalRecordsCard } from '../compone
 import { SyncStrip } from '../components/SyncStatus';
 import { Sparkline, TrendDelta } from '../components/Sparkline';
 import ScoreDetailSheet from '../components/ScoreDetailSheet';
+import ReadinessToday from '../components/ReadinessToday';
 
 /**
  * A metric tile that interprets rather than just reports: the value, how it
@@ -264,6 +265,8 @@ export default function Dashboard() {
           ))}
         </div>
       </Card>
+
+      <ReadinessToday />
 
       {/* ---------------- Today's raw numbers ---------------- */}
       <Card delay={60}>
