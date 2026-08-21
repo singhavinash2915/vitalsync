@@ -79,6 +79,16 @@ const METRIC_ALIASES: Record<string, string> = {
   steps: 'steps',
   step_count: 'steps',
 
+  vo2_max: 'vo2_max',
+  vo2max: 'vo2_max',
+  respiratory_rate: 'respiratory_rate',
+  breathing_rate: 'respiratory_rate',
+  weight: 'weight_kg',
+  weight_body_mass: 'weight_kg',
+  body_mass: 'weight_kg',
+  cardio_recovery: 'cardio_recovery',
+  heart_rate_recovery_one_minute: 'cardio_recovery',
+
   sleep_hours: 'sleep_hours',
   sleep_analysis: 'sleep_hours',
   sleep_duration: 'sleep_hours',
@@ -97,6 +107,10 @@ const RANGES: Record<string, [number, number]> = {
   steps: [0, 200000],
   sleep_hours: [0, 24],
   sleep_quality: [1, 5],
+  vo2_max: [10, 100],
+  respiratory_rate: [4, 60],
+  weight_kg: [20, 400],
+  cardio_recovery: [0, 100],
 };
 
 const INTEGER_COLUMNS = new Set(['resting_hr', 'active_calories', 'steps', 'sleep_quality']);
@@ -133,6 +147,9 @@ function convertUnits(column: string, value: number, units?: string): number {
   if (column === 'body_temp') {
     if (unit.includes('f') || value > 45) return ((value - 32) * 5) / 9;
     return value;
+  }
+  if (column === 'weight_kg' && (unit === 'lb' || unit === 'lbs')) {
+    return value * 0.45359237;
   }
   return value;
 }

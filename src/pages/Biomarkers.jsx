@@ -73,8 +73,13 @@ export default function Biomarkers() {
   const profile = useAuthStore((s) => s.profile);
   const loading = useDataStore((s) => s.loading);
   const health = useDataStore((s) => s.health);
+  const biomarkerHistory = useDataStore((s) => s.biomarkers);
 
-  const markers = useMemo(() => summariseBiomarkers(health, profile), [health, profile]);
+  // Prefer the unwindowed set; the rolling window would hide most of the
+  // history for anything measured less than daily.
+  const source = biomarkerHistory?.length ? biomarkerHistory : health;
+
+  const markers = useMemo(() => summariseBiomarkers(source, profile), [source, profile]);
   const present = markers.filter((m) => m.hasData);
   const missing = markers.filter((m) => !m.hasData);
 
@@ -100,8 +105,8 @@ export default function Biomarkers() {
           <div className="min-w-0">
             <h1 className="text-base font-semibold">Biology</h1>
             <p className="muted text-xs">
-              {present.length} marker{present.length === 1 ? '' : 's'} tracked from{' '}
-              {health.length.toLocaleString()} days
+              {present.length} marker{present.length === 1 ? '' : 's'} across{' '}
+              {source.length.toLocaleString()} days of readings
             </p>
           </div>
         </div>

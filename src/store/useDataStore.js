@@ -93,6 +93,7 @@ export const useDataStore = create((set, get) => ({
   journal: [],
   scores: [],
   snapshots: [],
+  biomarkers: [],
 
   loading: true,
   saving: false,
@@ -107,6 +108,7 @@ export const useDataStore = create((set, get) => ({
       journal: [],
       scores: [],
       snapshots: [],
+      biomarkers: [],
       loading: true,
       error: null,
       lastSyncedAt: null,
@@ -129,7 +131,7 @@ export const useDataStore = create((set, get) => ({
         .order('date', { ascending: false });
 
     try {
-      const [health, sleep, workouts, journal, scores, snapshots] = await Promise.all([
+      const [health, sleep, workouts, journal, scores, snapshots, biomarkers] = await Promise.all([
         table('health_logs'),
         table('sleep_logs'),
         table('workout_logs'),
@@ -142,6 +144,19 @@ export const useDataStore = create((set, get) => ({
           .eq('user_id', userId)
           .gte('date', toKey(subDays(new Date(), 2)))
           .order('captured_at', { ascending: true }),
+        // Biomarkers deliberately ignore the rolling window. VO2 max is
+        // estimated every few weeks, not daily, so a 120-day view held only 6
+        // of 52 readings and hid years of trend. Selecting just these columns
+        // where at least one is present keeps it to a hundred-odd rows.
+        supabase
+          .from('health_logs')
+          .select('date, hrv, resting_hr, spo2, vo2_max, respiratory_rate, weight_kg, cardio_recovery')
+          .eq('user_id', userId)
+          .or(
+            'vo2_max.not.is.null,respiratory_rate.not.is.null,weight_kg.not.is.null,cardio_recovery.not.is.null,spo2.not.is.null'
+          )
+          .order('date', { ascending: false })
+          .limit(1000),
       ]);
 
       const firstError = [health, sleep, workouts, journal, scores].find((r) => r.error)?.error;
@@ -156,6 +171,7 @@ export const useDataStore = create((set, get) => ({
         // A missing snapshots table (migrations not applied) must not break
         // the whole load — the curve is an extra, not a requirement.
         snapshots: snapshots.error ? [] : (snapshots.data ?? []),
+        biomarkers: biomarkers.error ? [] : (biomarkers.data ?? []),
         loading: false,
         lastSyncedAt: new Date().toISOString(),
       });
