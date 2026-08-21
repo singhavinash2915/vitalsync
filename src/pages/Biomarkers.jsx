@@ -5,6 +5,7 @@ import { HeartPulse, Activity, Info, TrendingUp, TrendingDown, Minus } from 'luc
 import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
 import { summariseBiomarkers } from '../lib/biomarkers';
+import { ageFrom } from '../lib/training';
 import { relativeDay } from '../lib/dates';
 import { Sparkline } from '../components/Sparkline';
 import { Card, CardHeader, CardBody, Badge, EmptyState, Skeleton, Alert } from '../components/ui';
@@ -79,7 +80,17 @@ export default function Biomarkers() {
   // history for anything measured less than daily.
   const source = biomarkerHistory?.length ? biomarkerHistory : health;
 
-  const markers = useMemo(() => summariseBiomarkers(source, profile), [source, profile]);
+  // Age drives the VO2 reference bands and must follow the birth date rather
+  // than a value typed in once and never revisited.
+  const scoringProfile = useMemo(
+    () => (profile ? { ...profile, age: ageFrom(profile) ?? profile.age } : profile),
+    [profile]
+  );
+
+  const markers = useMemo(
+    () => summariseBiomarkers(source, scoringProfile),
+    [source, scoringProfile]
+  );
   const present = markers.filter((m) => m.hasData);
   const missing = markers.filter((m) => !m.hasData);
 

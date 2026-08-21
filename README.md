@@ -50,10 +50,32 @@ different project.
 | **Sleep** | Bedtime/wake time with auto-calculated duration, quality rating, 14-night bar chart |
 | **Journal** | Habit toggles (alcohol, travel, meditation), stress and diet ratings, notes — with a live readout of the net effect on your recovery score |
 | **Trends** | Seven interactive charts over 7 / 30 / 90 days: recovery, HRV, resting HR, sleep, exertion-vs-recovery, readiness, steps & calories |
-| **Settings** | Profile, calorie target, theme, sync status, Apple Health import, sync keys, JSON/CSV export |
+| **Plan** | Weekly training blocks — which weekdays are gym, cricket, run or rest, with a start date so a new block retires the old one |
+| **Settings** | Profile, date of birth, calorie target, theme, sync status, Apple Health import, sync keys, JSON/CSV export |
 
 Everything works offline once loaded — the service worker serves the app shell from cache and
 falls back to your last-synced data.
+
+---
+
+## Today's session
+
+The dashboard leads with a decision, not a number: what today's plan says you're doing, and what
+this morning's readiness means for it.
+
+The point is that the same score means different things for different sessions. A gym session is
+infinitely scalable — drop a set, drop the weight, go home. A 16-over match is not: once you've
+turned up you're fielding for sixteen overs whatever your HRV says. So readiness of 51 before the
+gym reads *"three working sets rather than five, stop two reps short"*, and the same 51 before a
+match reads *"split your spells, lead with batting, take an inner-ring position"* — because the
+only lever left is how you spend yourself inside it.
+
+Bowling advice is weighted hardest at low readiness. Repeated near-maximal bowling on a poorly
+recovered body is a known contributor to side and lower-back injuries, and unlike batting it's a
+load you can partly choose.
+
+Signals that matter more than the headline number are surfaced separately: short sleep, a resting
+heart rate above baseline, or a third consecutive low day.
 
 ---
 

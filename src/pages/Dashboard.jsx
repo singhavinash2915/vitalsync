@@ -26,6 +26,7 @@ import { SyncStrip } from '../components/SyncStatus';
 import { Sparkline, TrendDelta } from '../components/Sparkline';
 import ScoreDetailSheet from '../components/ScoreDetailSheet';
 import ReadinessToday from '../components/ReadinessToday';
+import TodaySession from '../components/TodaySession';
 
 /**
  * A metric tile that interprets rather than just reports: the value, how it
@@ -186,6 +187,9 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       <SyncStrip />
+
+      {/* The decision comes before the data that produced it. */}
+      <TodaySession computed={computed} health={dayHealth} sleep={daySleep} />
 
       {/* ---------------- Hero: readiness ---------------- */}
       <Card className="overflow-hidden">

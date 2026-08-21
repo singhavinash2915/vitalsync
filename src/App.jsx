@@ -16,6 +16,7 @@ import Sleep from './pages/Sleep';
 import Journal from './pages/Journal';
 import Trends from './pages/Trends';
 import Biomarkers from './pages/Biomarkers';
+import Plan from './pages/Plan';
 import Settings from './pages/Settings';
 import SetupRequired from './pages/SetupRequired';
 
@@ -121,6 +122,7 @@ export default function App() {
       <Route path="/journal" element={<Protected><Journal /></Protected>} />
       <Route path="/trends" element={<Protected><Trends /></Protected>} />
       <Route path="/biology" element={<Protected><Biomarkers /></Protected>} />
+      <Route path="/plan" element={<Protected><Plan /></Protected>} />
       <Route path="/settings" element={<Protected><Settings /></Protected>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />

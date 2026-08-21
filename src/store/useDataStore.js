@@ -94,6 +94,7 @@ export const useDataStore = create((set, get) => ({
   scores: [],
   snapshots: [],
   biomarkers: [],
+  plan: [],
 
   loading: true,
   saving: false,
@@ -109,6 +110,7 @@ export const useDataStore = create((set, get) => ({
       scores: [],
       snapshots: [],
       biomarkers: [],
+      plan: [],
       loading: true,
       error: null,
       lastSyncedAt: null,
@@ -131,7 +133,8 @@ export const useDataStore = create((set, get) => ({
         .order('date', { ascending: false });
 
     try {
-      const [health, sleep, workouts, journal, scores, snapshots, biomarkers] = await Promise.all([
+      const [health, sleep, workouts, journal, scores, snapshots, biomarkers, plan] =
+        await Promise.all([
         table('health_logs'),
         table('sleep_logs'),
         table('workout_logs'),
@@ -157,6 +160,11 @@ export const useDataStore = create((set, get) => ({
           )
           .order('date', { ascending: false })
           .limit(1000),
+        supabase
+          .from('training_plan')
+          .select('*')
+          .eq('user_id', userId)
+          .order('starts_on', { ascending: false }),
       ]);
 
       const firstError = [health, sleep, workouts, journal, scores].find((r) => r.error)?.error;
@@ -172,6 +180,7 @@ export const useDataStore = create((set, get) => ({
         // the whole load — the curve is an extra, not a requirement.
         snapshots: snapshots.error ? [] : (snapshots.data ?? []),
         biomarkers: biomarkers.error ? [] : (biomarkers.data ?? []),
+        plan: plan.error ? [] : (plan.data ?? []),
         loading: false,
         lastSyncedAt: new Date().toISOString(),
       });
@@ -290,6 +299,67 @@ export const useDataStore = create((set, get) => ({
       .eq('id', userId);
 
     return { ok: true, rebuilt: result.count };
+  },
+
+  /**
+   * Writes a whole block at once — seven weekday rows sharing a start date.
+   * Replacing rather than patching keeps the block coherent when a day changes
+   * activity or the date range moves.
+   */
+  savePlanBlock: async ({ userId, block }) => {
+    set({ saving: true, error: null });
+    try {
+      await supabase
+        .from('training_plan')
+        .delete()
+        .eq('user_id', userId)
+        .eq('starts_on', block.starts_on);
+
+      const rows = Object.entries(block.days ?? {}).map(([weekday, activity]) => ({
+        user_id: userId,
+        name: block.name?.trim() || null,
+        starts_on: block.starts_on,
+        ends_on: block.ends_on || null,
+        weekday: Number(weekday),
+        activity,
+        start_time: activity === 'rest' ? null : block.start_time || null,
+      }));
+
+      if (rows.length) {
+        const { error } = await supabase.from('training_plan').insert(rows);
+        if (error) throw error;
+      }
+
+      const { data } = await supabase
+        .from('training_plan')
+        .select('*')
+        .eq('user_id', userId)
+        .order('starts_on', { ascending: false });
+
+      set({ plan: data ?? [], saving: false });
+      return { ok: true };
+    } catch (error) {
+      const message = describeError(error, 'Could not save that block.');
+      set({ saving: false, error: message });
+      return { ok: false, message };
+    }
+  },
+
+  deletePlanBlock: async ({ userId, block }) => {
+    const previous = get().plan;
+    set((state) => ({ plan: state.plan.filter((r) => r.starts_on !== block.starts_on) }));
+
+    const { error } = await supabase
+      .from('training_plan')
+      .delete()
+      .eq('user_id', userId)
+      .eq('starts_on', block.starts_on);
+
+    if (error) {
+      set({ plan: previous, error: describeError(error, 'Could not delete that block.') });
+      return { ok: false };
+    }
+    return { ok: true };
   },
 
   saveHealth: (args) => get().upsertDaily('health_logs', 'health', args),
