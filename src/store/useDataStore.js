@@ -1,6 +1,6 @@
 import { create } from 'zustand';
 import { supabase, describeError } from '../lib/supabase';
-import { computeDailyScores } from '../lib/scores';
+import { computeDailyScores, SCORING_VERSION } from '../lib/scores';
 import { HEALTH_COLUMNS } from '../lib/healthImport';
 import { todayKey, toKey, lastNDays, fromKey } from '../lib/dates';
 import { subDays } from 'date-fns';
@@ -251,6 +251,29 @@ export const useDataStore = create((set, get) => ({
       set({ saving: false, error: message });
       return { ok: false, message };
     }
+  },
+
+  /**
+   * Rebuilds stored scores once after a change to the scoring algorithm.
+   *
+   * Today is always recomputed live, so only history goes stale — which shows
+   * up as Trends disagreeing with the dashboard. Comparing the profile's saved
+   * version against the current one makes that self-healing instead of relying
+   * on someone finding the rebuild button.
+   */
+  rebuildIfScoringChanged: async (userId, profile) => {
+    if (!userId || !profile) return { ok: true, skipped: true };
+    if (Number(profile.scoring_version) === SCORING_VERSION) return { ok: true, skipped: true };
+
+    const result = await get().recomputeAll(userId, profile);
+    if (!result.ok) return result;
+
+    await supabase
+      .from('users')
+      .update({ scoring_version: SCORING_VERSION })
+      .eq('id', userId);
+
+    return { ok: true, rebuilt: result.count };
   },
 
   saveHealth: (args) => get().upsertDaily('health_logs', 'health', args),

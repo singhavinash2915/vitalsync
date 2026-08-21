@@ -22,7 +22,8 @@ const WEIGHT_NOTE = {
   recovery: 'HRV counts for 60%, resting heart rate for 40%. Lifestyle adjustments are added after.',
   sleep: 'Duration counts for 60%, how rested you felt for 40%.',
   exertion: 'Active calories against your target, plus up to 20 points for workout intensity.',
-  readiness: 'Recovery 50%, sleep 30%, and the load you have already spent 20%.',
+  readiness:
+    'Readiness is your recovery: HRV and resting heart rate against your own 60-day baseline. Sleep and load are shown beside it, not blended into it.',
 };
 
 function Row({ label, value, hint }) {
@@ -203,19 +204,56 @@ export default function ScoreDetailSheet({ open, onClose, metric, computed, heal
         {/* ---- readiness ---- */}
         {metric === 'readiness' ? (
           <div className="space-y-3">
-            <ScoreBar label="Recovery (50%)" value={computed.recovery_score} />
-            <ScoreBar label="Sleep (30%)" value={computed.sleep_score} />
+            <ScoreBar label="HRV vs your baseline (60%)" value={breakdown.recovery.hrvScore} />
             <ScoreBar
-              label="Load already spent (20%)"
-              value={
-                computed.exertion_score === null ? null : 100 - computed.exertion_score
-              }
-              color="#a855f7"
+              label="Resting HR vs your baseline (40%)"
+              value={breakdown.recovery.rhrScore}
             />
+
+            <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)' }}>
+              <Row
+                label="Your HRV today"
+                value={health?.hrv ? `${health.hrv} ms` : '—'}
+                hint={
+                  breakdown.baselines.hrv
+                    ? `60-day baseline ${breakdown.baselines.hrv} ms`
+                    : 'baseline still building'
+                }
+              />
+              <Row
+                label="Resting heart rate"
+                value={health?.resting_hr ? `${health.resting_hr} bpm` : '—'}
+                hint={
+                  breakdown.baselines.restingHr
+                    ? `60-day baseline ${breakdown.baselines.restingHr} bpm`
+                    : 'baseline still building'
+                }
+              />
+              {breakdown.recovery.modifier ? (
+                <Row
+                  label="Lifestyle adjustments"
+                  value={`${breakdown.recovery.modifier > 0 ? '+' : ''}${breakdown.recovery.modifier}`}
+                />
+              ) : null}
+            </div>
+
+            <div
+              className="rounded-xl border p-3"
+              style={{ borderColor: 'var(--border)', background: 'var(--bg-sunken)' }}
+            >
+              <p className="mb-1.5 text-xs font-semibold">Reported alongside, not subtracted</p>
+              <Row label="Sleep" value={computed.sleep_score ?? '—'} />
+              <Row
+                label="Load spent today"
+                value={computed.exertion_score ?? '—'}
+                hint={exertionLabel(computed.exertion_score)}
+              />
+            </div>
+
             <p className="muted flex items-start gap-1.5 text-[11px] leading-relaxed">
               <Info size={12} className="mt-px shrink-0" aria-hidden="true" />
-              Anything not logged is dropped and the remaining weights rescaled, so a missing night
-              of sleep does not quietly cost you 30 points.
+              Sleep still reaches this number, but through physiology rather than arithmetic: a
+              good night adds 10 points inside recovery, the same way alcohol removes 10.
             </p>
           </div>
         ) : null}

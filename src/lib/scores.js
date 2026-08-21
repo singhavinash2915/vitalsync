@@ -27,6 +27,17 @@
 export const BASELINE_DAYS = 60;
 
 /**
+ * Bumped whenever a change to this file would make previously stored scores
+ * disagree with freshly computed ones. The app compares it against the value
+ * saved on the profile and rebuilds history once when they differ — otherwise
+ * the dashboard (which always recomputes live) would show one formula while
+ * Trends showed another.
+ *
+ * 2: readiness became pure recovery; load is reported alongside, not subtracted.
+ */
+export const SCORING_VERSION = 2;
+
+/**
  * Below this, the baseline is too thin to trust and the sub-score falls back
  * to a neutral 50 rather than pretending to know.
  */
@@ -347,38 +358,30 @@ export function calcExertionScore({ activeCalories, workouts = [], calorieTarget
 // ---------------------------------------------------------------------------
 
 /**
- * Readiness Score — the single "what should I do today" number.
+ * Readiness Score — how ready your body is to take on load.
  *
- *   Recovery         × 0.5
- *   Sleep            × 0.3
- *   (100 - Exertion) × 0.2   ← the load you've already spent
+ * Readiness IS recovery: HRV and resting heart rate against your own baseline,
+ * plus the lifestyle adjustments. Sleep and the load you have already spent are
+ * reported next to it rather than blended into it.
  *
- * Exertion is inverted because accumulated load reduces readiness.
+ * This changed deliberately. The previous formula folded sleep and exertion in
+ * at 30% and 20%, which conflated two genuinely different questions — "how
+ * recovered am I" and "how much have I already spent today" — into a single
+ * number that answered neither cleanly. On one real day it cost 21 points of
+ * drag and put the score 19 below what an HRV-based app reported for the same
+ * morning, not because the apps disagreed about the body but because one was
+ * quietly subtracting a day's walking from a measure of autonomic recovery.
  *
- * Components that were never logged are passed as null and **excluded**, with
- * the remaining weights renormalised so the result stays on a true 0-100
- * scale. Without this, one unlogged component reads as a catastrophic day:
- * no sleep record used to cost a flat 30 points, so a well-recovered morning
- * still reported "Poor" purely because the watch wasn't worn overnight.
+ * Sleep still reaches readiness, but through physiology rather than
+ * arithmetic: a good night adds 10 points inside the recovery calculation, the
+ * same way alcohol removes 10. That is a real effect on autonomic tone, not a
+ * weighting.
  */
-export function calcReadinessScore({ recovery = null, sleep = null, exertion = null } = {}) {
-  const parts = [
-    { value: recovery, weight: 0.5 },
-    { value: sleep, weight: 0.3 },
-    // Exertion of 0 is a real, meaningful value (a rest day), so only a true
-    // null is treated as missing.
-    { value: exertion === null || exertion === undefined ? null : 100 - clamp(exertion, 0, 100), weight: 0.2 },
-  ].filter((p) => p.value !== null && p.value !== undefined && Number.isFinite(Number(p.value)));
-
-  if (!parts.length) return { score: null, breakdown: { basis: [] } };
-
-  const totalWeight = parts.reduce((sum, p) => sum + p.weight, 0);
-  const value = parts.reduce((sum, p) => sum + clamp(Number(p.value), 0, 100) * p.weight, 0) / totalWeight;
-
-  return {
-    score: round(value),
-    breakdown: { basis: parts.map((p) => p.weight), coverage: round(totalWeight * 100) },
-  };
+export function calcReadinessScore({ recovery = null } = {}) {
+  if (recovery === null || recovery === undefined || !Number.isFinite(Number(recovery))) {
+    return { score: null, breakdown: { basis: 'recovery' } };
+  }
+  return { score: round(Number(recovery)), breakdown: { basis: 'recovery' } };
 }
 
 // ---------------------------------------------------------------------------
@@ -450,8 +453,6 @@ export function computeDailyScores({
 
   const readiness = calcReadinessScore({
     recovery: hasRecoveryInput ? recovery.score : null,
-    sleep: sleepScore.score,
-    exertion: hasExertionInput ? exertion.score : null,
   });
 
   return {

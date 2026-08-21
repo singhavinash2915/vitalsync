@@ -45,7 +45,7 @@ different project.
 
 | Screen | What's on it |
 |---|---|
-| **Home** | Four animated score rings, today's raw metrics, a breakdown of how each score was calculated, insights, weekly averages and personal records |
+| **Home** | Readiness ring with sleep and load beside it, an intraday readiness curve, today's raw metrics with 14-day sparklines, tap-through workings for every score, insights, weekly averages and personal records |
 | **Workouts** | Log sessions with type, duration and 1–10 intensity; MET-based calorie estimate; 7-day rollup |
 | **Sleep** | Bedtime/wake time with auto-calculated duration, quality rating, 14-night bar chart |
 | **Journal** | Habit toggles (alcohol, travel, meditation), stress and diet ratings, notes — with a live readout of the net effect on your recovery score |
@@ -125,28 +125,34 @@ labels it "Light load / Moderate load / High load / Very high load" rather than 
 ### Readiness
 
 ```
-recovery × 0.5  +  sleep × 0.3  +  (100 − exertion) × 0.2
+readiness = recovery
 ```
 
-Exertion is inverted because accumulated load *reduces* readiness. The weights sum to 1.0, so the
-result stays on a true 0–100 scale.
+Readiness **is** recovery — HRV and resting heart rate against your own 60-day baseline, plus the
+lifestyle adjustments. Sleep and the load you've already spent are reported *beside* it, never
+blended into it.
 
-**Unlogged components are excluded and the remaining weights renormalised.** With no sleep record,
-readiness is `(recovery × 0.5 + (100 − exertion) × 0.2) / 0.7`. Only a genuine null counts as
-missing — an exertion of 0 is a real rest day, not an absence.
+> **This changed in scoring version 2.** The old formula was
+> `recovery × 0.5 + sleep × 0.3 + (100 − exertion) × 0.2`, which conflated two different questions
+> — "how recovered am I" and "how much have I already spent today" — into a number that answered
+> neither cleanly. On one real day it applied 21 points of drag and landed 19 below what an
+> HRV-based app reported for the same morning: not because the apps disagreed about the body, but
+> because one was quietly subtracting a day's walking from a measure of autonomic recovery.
+>
+> Sleep still reaches readiness, through physiology rather than arithmetic: a good night adds 10
+> points inside the recovery calculation, exactly as alcohol removes 10.
+
+Stored scores rebuild themselves once when `SCORING_VERSION` changes, so Trends can never show one
+formula while the dashboard shows another.
 
 ### Tuning your calorie target
 
 The 600 default is a guess. If it lands near your average burn, exertion pegs at 100 on half your
-days, carries no information, and permanently docks readiness by the full 20-point weight.
+days and stops carrying any information — every day reads "very high load" whether you sat still
+or ran.
 
 Settings shows a suggestion computed from your own logged days once you have at least a week:
 `median ÷ 0.7`, rounded to 50 — which aims a typical day at 70% and leaves headroom for a hard one.
-
-> **Note on the formula.** The original spec wrote this last term as `100 - Exertion * 0.2`, which
-> evaluates to 80–100 regardless of load and pushes the total to ~180. VitalSync implements
-> `(100 - exertion) * 0.2`, the normalised reading. Change it in `calcReadinessScore` if you want
-> the literal version.
 
 ### Colour bands
 

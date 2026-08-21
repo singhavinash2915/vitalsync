@@ -208,7 +208,9 @@ export default function Dashboard() {
             <ScoreRing value={readiness} size={172} stroke={14} sublabel="Readiness" />
           </button>
 
-          <p className="muted mt-2 text-[10px]">Tap any ring to see how it was calculated</p>
+          <p className="muted mt-2 text-[10px]">
+            Readiness is your recovery. Tap any ring for the workings.
+          </p>
 
           <p
             className="mt-3 max-w-xs text-center text-xs leading-relaxed"
@@ -233,16 +235,17 @@ export default function Dashboard() {
         </div>
 
         {/* ---------------- Three supporting rings ---------------- */}
+        {/* Sleep and load sit BESIDE readiness rather than inside it — they
+            answer different questions and blending them answered neither. */}
         <div
-          className="grid grid-cols-3 gap-2 border-t px-3 py-4"
+          className="grid grid-cols-2 gap-2 border-t px-3 py-4"
           style={{ borderColor: 'var(--border)' }}
         >
           {[
-            { key: 'recovery', label: 'Recovery', value: computed.recovery_score },
             { key: 'sleep', label: 'Sleep', value: computed.sleep_score },
             {
               key: 'exertion',
-              label: 'Exertion',
+              label: 'Load today',
               value: computed.exertion_score,
               color: '#a855f7',
               statusLabel: exertionLabel(computed.exertion_score),

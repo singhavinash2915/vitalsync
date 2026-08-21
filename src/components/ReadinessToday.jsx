@@ -1,25 +1,28 @@
 import { useMemo } from 'react';
-import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer, ReferenceLine } from 'recharts';
+import { AreaChart, Area, XAxis, YAxis, Tooltip, ResponsiveContainer } from 'recharts';
 import { Activity, Info } from 'lucide-react';
 
 import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
-import { computeDailyScores, scoreColor } from '../lib/scores';
+import { computeDailyScores } from '../lib/scores';
 import { todayKey } from '../lib/dates';
 import { Card, CardHeader, CardBody, Badge } from './ui';
 
 /**
- * Readiness across today.
+ * Today's load, against the readiness you started with.
  *
- * It is a genuinely moving number, not a once-a-morning verdict: active
- * calories accumulate through the day, and the load you have already spent
- * counts against readiness. So the line falls as you use yourself up, and a
- * hard afternoon shows up as a step down.
+ * Now that readiness is pure recovery it is fixed by the morning's HRV and
+ * resting heart rate — plotting it alone would draw a permanently flat line.
+ * What actually moves through the day is load: active calories accumulate,
+ * so the purple area climbs while the blue line stays put.
  *
- * Each point is recomputed from the raw inputs captured at that moment using
- * the same scoring code as everything else, rather than reading back a stored
- * score. That keeps one implementation of the algorithm and means old points
- * re-score correctly whenever it changes.
+ * The gap between them is the useful part. A high line with a low area means
+ * capacity you have not spent; the area closing on the line means you have
+ * used up the day you were given.
+ *
+ * Each point is recomputed from the raw inputs captured at that moment with
+ * the same scoring code as everything else, so there is one implementation of
+ * the algorithm and old points re-score correctly when it changes.
  */
 export default function ReadinessToday() {
   const profile = useAuthStore((s) => s.profile);
@@ -76,28 +79,25 @@ export default function ReadinessToday() {
 
   const first = points[0];
   const last = points[points.length - 1];
-  const drop = first.readiness - last.readiness;
+  const loadGained = (last.exertion ?? 0) - (first.exertion ?? 0);
+  const headroom = (last.readiness ?? 0) - (last.exertion ?? 0);
 
   return (
     <Card delay={30}>
       <CardHeader
-        title="Readiness through today"
+        title="Today's load against your readiness"
         subtitle={`${points.length} readings · ${first.label} to ${last.label}`}
         icon={Activity}
-        action={
-          <Badge color={scoreColor(last.readiness)}>
-            {drop > 0 ? `−${drop}` : drop < 0 ? `+${Math.abs(drop)}` : 'flat'}
-          </Badge>
-        }
+        action={<Badge color="#a855f7">+{loadGained} load</Badge>}
       />
       <CardBody>
         <div className="h-40 w-full">
           <ResponsiveContainer width="100%" height="100%">
             <AreaChart data={points} margin={{ top: 6, right: 8, bottom: 0, left: -26 }}>
               <defs>
-                <linearGradient id="readyToday" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.45} />
-                  <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.02} />
+                <linearGradient id="loadToday" x1="0" y1="0" x2="0" y2="1">
+                  <stop offset="0%" stopColor="#a855f7" stopOpacity={0.45} />
+                  <stop offset="100%" stopColor="#a855f7" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
               <XAxis
@@ -114,8 +114,6 @@ export default function ReadinessToday() {
                 axisLine={false}
                 tickLine={false}
               />
-              <ReferenceLine y={66} stroke="#22c55e" strokeDasharray="3 3" strokeOpacity={0.35} />
-              <ReferenceLine y={33} stroke="#ef4444" strokeDasharray="3 3" strokeOpacity={0.35} />
               <Tooltip
                 contentStyle={{
                   background: 'var(--bg-elevated)',
@@ -124,14 +122,27 @@ export default function ReadinessToday() {
                   fontSize: 11,
                 }}
                 labelStyle={{ color: 'var(--text-muted)' }}
-                formatter={(value, name) => [value, name === 'readiness' ? 'Readiness' : name]}
+                formatter={(value, name) => [
+                  value,
+                  name === 'readiness' ? 'Readiness' : 'Load spent',
+                ]}
+              />
+              {/* Load climbs; readiness is level because it was set overnight. */}
+              <Area
+                type="monotone"
+                dataKey="exertion"
+                stroke="#a855f7"
+                strokeWidth={2.5}
+                fill="url(#loadToday)"
+                activeDot={{ r: 4 }}
               />
               <Area
                 type="monotone"
                 dataKey="readiness"
                 stroke="#38bdf8"
-                strokeWidth={2.5}
-                fill="url(#readyToday)"
+                strokeWidth={2}
+                fill="none"
+                dot={false}
                 activeDot={{ r: 4 }}
               />
             </AreaChart>
@@ -140,9 +151,11 @@ export default function ReadinessToday() {
 
         <p className="muted mt-1 flex items-start gap-1.5 text-[11px] leading-relaxed">
           <Info size={12} className="mt-px shrink-0" aria-hidden="true" />
-          {drop > 3
-            ? `Down ${drop} points since this morning — that is the ${last.calories ?? 0} kcal you have spent working against you.`
-            : 'Recovery and sleep are fixed by the morning; what moves through the day is the load you spend.'}
+          {headroom > 15
+            ? `Readiness ${last.readiness} against ${last.exertion} spent — you still have room today.`
+            : headroom > -10
+              ? `Load has caught up with your readiness (${last.exertion} against ${last.readiness}). Keep anything further easy.`
+              : `You have spent more than today gave you (${last.exertion} against ${last.readiness}). Expect tomorrow's HRV to show it.`}
         </p>
       </CardBody>
     </Card>

@@ -68,6 +68,19 @@ export default function App() {
     }
   }, [user?.id, loadAll, reset]);
 
+  // Once the data and profile are both present, bring stored scores up to date
+  // with the current formula. No-ops unless the algorithm actually changed.
+  useEffect(() => {
+    if (!user?.id || !profile) return;
+    const { rebuildIfScoringChanged } = useDataStore.getState();
+    rebuildIfScoringChanged(user.id, profile).then((r) => {
+      if (r?.rebuilt) {
+        useAuthStore.getState().loadProfile(user);
+        console.info(`[VitalSync] Rebuilt ${r.rebuilt} days for the new scoring formula.`);
+      }
+    });
+  }, [user?.id, profile?.scoring_version, profile, user]);
+
   // Refresh in the background when the app is brought back to the foreground —
   // an iOS Shortcut may have POSTed new Apple Watch data while it was closed.
   useEffect(() => {
