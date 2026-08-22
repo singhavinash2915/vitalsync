@@ -1,0 +1,85 @@
+name: Back up the database
+
+# The free Supabase plan has no automated backups and no point-in-time
+# recovery, so nothing exists to restore from if a table is emptied. Row-level
+# security now stops an anonymous visitor writing at all, but that protects
+# against strangers, not against a bad import, a bug in this repo, or the
+# project being deleted. This is the copy of last resort.
+#
+# NOTE: this repository is public, and workflow artifacts on a public repo are
+# downloadable by anyone. That is consistent with the data already being
+# readable at the app's URL. If the data is ever made private again, this must
+# move to a private store.
+
+on:
+  schedule:
+    # 02:40 UTC — after midnight IST, and off the hour, where GitHub's
+    # scheduler is less contended and less likely to drop the run.
+    - cron: '40 2 * * *'
+  workflow_dispatch:
+
+jobs:
+  dump:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Dump every table to JSON
+        env:
+          URL: ${{ secrets.VITE_SUPABASE_URL }}
+          KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+        run: |
+          if [ -z "$URL" ] || [ -z "$KEY" ]; then
+            echo "::error::VITE_SUPABASE_URL / SUPABASE_SERVICE_ROLE_KEY secrets are not set."
+            exit 1
+          fi
+
+          mkdir -p backup
+          total=0
+
+          # The service role sees every row regardless of policy, which is what
+          # a backup needs. PostgREST caps a response at 1,000 rows whatever
+          # the limit says, so each table is paged until a short page arrives.
+          for t in users health_logs sleep_logs workout_logs journal_logs \
+                   scores health_snapshots training_plan sync_keys; do
+            offset=0
+            echo "[" > "backup/$t.json"
+            first=1
+            while : ; do
+              page=$(curl -sS --fail-with-body -m 120 \
+                "$URL/rest/v1/$t?select=*&order=id&offset=$offset&limit=1000" \
+                -H "apikey: $KEY" -H "Authorization: Bearer $KEY") || {
+                  echo "::error::Failed reading $t at offset $offset"; exit 1; }
+
+              n=$(printf '%s' "$page" | jq 'length')
+              if [ "$n" -gt 0 ]; then
+                [ $first -eq 0 ] && echo "," >> "backup/$t.json"
+                printf '%s' "$page" | jq -c '.[]' | paste -sd, - >> "backup/$t.json"
+                first=0
+              fi
+
+              offset=$((offset + n))
+              [ "$n" -lt 1000 ] && break
+            done
+            echo "]" >> "backup/$t.json"
+
+            rows=$(jq 'length' "backup/$t.json")
+            total=$((total + rows))
+            printf '%-18s %6s rows\n' "$t" "$rows"
+          done
+
+          echo "total rows: $total" | tee backup/MANIFEST.txt
+          date -u +'taken: %Y-%m-%dT%H:%M:%SZ' >> backup/MANIFEST.txt
+
+          # A backup that silently captured nothing is worse than no backup,
+          # because it looks like one. health_logs is the irreplaceable table.
+          health=$(jq 'length' backup/health_logs.json)
+          if [ "$health" -lt 100 ]; then
+            echo "::error::Only $health health_logs rows — refusing to store a suspect backup."
+            exit 1
+          fi
+
+      - name: Upload
+        uses: actions/upload-artifact@v4
+        with:
+          name: vitalsync-backup-${{ github.run_id }}
+          path: backup/
+          retention-days: 90
