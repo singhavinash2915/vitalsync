@@ -32,6 +32,25 @@ jobs:
             exit 1
           fi
 
+          # Pasting a key into `gh secret set` very easily stores a trailing
+          # newline with it, and PostgREST answers a key with a stray \n on the
+          # end with a flat 401 that looks exactly like a wrong key. Strip
+          # whitespace from both, and the trailing slash a copied project URL
+          # usually carries, so neither can waste an evening again.
+          URL=$(printf '%s' "$URL" | tr -d '[:space:]' | sed 's#/*$##')
+          KEY=$(printf '%s' "$KEY" | tr -d '[:space:]')
+
+          # Fail on the credential itself rather than midway through a table,
+          # so the error names the actual problem.
+          probe=$(curl -s -o /dev/null -w '%{http_code}' -m 30 \
+            "$URL/rest/v1/health_logs?select=id&limit=1" \
+            -H "apikey: $KEY" -H "Authorization: Bearer $KEY")
+          if [ "$probe" != "200" ]; then
+            echo "::error::Supabase rejected the service-role key (HTTP $probe). Re-set it with: printf '%s' 'KEY' | gh secret set SUPABASE_SERVICE_ROLE_KEY"
+            exit 1
+          fi
+          echo "Credential accepted."
+
           mkdir -p backup
           total=0
 
