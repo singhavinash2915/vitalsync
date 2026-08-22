@@ -34,8 +34,12 @@ export const BASELINE_DAYS = 60;
  * Trends showed another.
  *
  * 2: readiness became pure recovery; load is reported alongside, not subtracted.
+ * 3: a missing resting heart rate no longer scores as 0 bpm (which read as
+ *    100% below baseline, i.e. perfect recovery), and recovery is weighted
+ *    over the halves actually measured instead of blending against a
+ *    placeholder 50.
  */
-export const SCORING_VERSION = 2;
+export const SCORING_VERSION = 3;
 
 /**
  * Below this, the baseline is too thin to trust and the sub-score falls back
@@ -155,19 +159,34 @@ export function calcRecoveryScore({ hrv, restingHr, hrvBaseline, rhrBaseline, jo
   const RHR_FULL_SCALE = 10;
 
   let hrvScore = 50;
-  if (Number.isFinite(hrv) && Number.isFinite(hrvBaseline) && hrvBaseline > 0) {
-    const deltaPct = ((hrv - hrvBaseline) / hrvBaseline) * 100;
+  let hasHrv = false;
+  if (hasNumber(hrv) && Number.isFinite(hrvBaseline) && hrvBaseline > 0) {
+    const deltaPct = ((toNumber(hrv) - hrvBaseline) / hrvBaseline) * 100;
     hrvScore = clamp(50 + (deltaPct / HRV_FULL_SCALE) * 50, 0, 100);
+    hasHrv = true;
   }
 
   let rhrScore = 50;
-  if (Number.isFinite(restingHr) && Number.isFinite(rhrBaseline) && rhrBaseline > 0) {
+  let hasRhr = false;
+  if (hasNumber(restingHr) && Number.isFinite(rhrBaseline) && rhrBaseline > 0) {
     // Inverted: a resting HR *below* baseline is the good direction.
-    const deltaPct = ((rhrBaseline - restingHr) / rhrBaseline) * 100;
+    const deltaPct = ((rhrBaseline - toNumber(restingHr)) / rhrBaseline) * 100;
     rhrScore = clamp(50 + (deltaPct / RHR_FULL_SCALE) * 50, 0, 100);
+    hasRhr = true;
   }
 
-  const base = hrvScore * 0.6 + rhrScore * 0.4;
+  // Weight only what was actually measured. Blending a real HRV against a
+  // placeholder 50 for the missing half drags every partial reading toward
+  // average and reports it with the same confidence as a complete one; if only
+  // HRV is known, the honest answer is what HRV alone says.
+  const base =
+    hasHrv && hasRhr
+      ? hrvScore * 0.6 + rhrScore * 0.4
+      : hasHrv
+        ? hrvScore
+        : hasRhr
+          ? rhrScore
+          : 50;
   const { total: modifier, applied } = habitModifiers(journal);
 
   return {
@@ -179,6 +198,9 @@ export function calcRecoveryScore({ hrv, restingHr, hrvBaseline, rhrBaseline, jo
       modifier,
       modifiers: applied,
       hasBaseline: Number.isFinite(hrvBaseline) || Number.isFinite(rhrBaseline),
+      // Which halves this score actually rests on, so a partial reading can be
+      // labelled as one rather than passed off as a full measurement.
+      measured: [hasHrv ? 'hrv' : null, hasRhr ? 'restingHr' : null].filter(Boolean),
     },
   };
 }
@@ -439,8 +461,11 @@ export function computeDailyScores({
     Number(sleep?.duration_hours) >= 7.5 && Number(sleep?.quality_rating ?? 0) >= 4;
 
   const recovery = calcRecoveryScore({
-    hrv: Number(health?.hrv),
-    restingHr: Number(health?.resting_hr),
+    // toNumber, not Number: a missing resting heart rate coerced to 0 reads as
+    // "100% below baseline", which the scoring rewards as perfect recovery. It
+    // pushed a genuine 22 up to 48 on any reading that arrived without an RHR.
+    hrv: toNumber(health?.hrv),
+    restingHr: toNumber(health?.resting_hr),
     hrvBaseline,
     rhrBaseline,
     journal: journal ? { ...journal, good_sleep: goodSleep } : goodSleep ? { good_sleep: true } : null,

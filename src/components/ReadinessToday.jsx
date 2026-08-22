@@ -4,17 +4,18 @@ import { Activity, Info } from 'lucide-react';
 
 import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
-import { computeDailyScores } from '../lib/scores';
+import { computeDailyScores, toNumber, hasNumber } from '../lib/scores';
 import { todayKey } from '../lib/dates';
 import { Card, CardHeader, CardBody, Badge } from './ui';
 
 /**
- * Today's load, against the readiness you started with.
+ * Today's load, against the readiness you have to spend it with.
  *
- * Now that readiness is pure recovery it is fixed by the morning's HRV and
- * resting heart rate — plotting it alone would draw a permanently flat line.
- * What actually moves through the day is load: active calories accumulate,
- * so the purple area climbs while the blue line stays put.
+ * Load is the line that really climbs: active calories accumulate, so the
+ * purple area only ever rises. Readiness moves too, but gently and for a
+ * different reason — Apple Health keeps revising the day's HRV and resting
+ * heart rate as it takes more samples, so the blue line drifts as the
+ * measurement sharpens rather than because the body changed.
  *
  * The gap between them is the useful part. A high line with a low area means
  * capacity you have not spent; the area closing on the line means you have
@@ -38,12 +39,52 @@ export default function ReadinessToday() {
     const today = (snapshots ?? []).filter((s) => s.date === date);
     if (today.length < 2) return [];
 
+    /*
+     * Snapshots do not all arrive in the same shape.
+     *
+     * The sync automation sometimes posts the day's running totals and
+     * sometimes only the latest samples, so raw `active_calories` here reads
+     * 71, 124, 15, 16, 316, 22, 511 across a single day. Plotted literally
+     * that draws a load line that repeatedly falls back to nothing, and the
+     * partial payloads also arrive without a resting heart rate, so those
+     * points scored a different — and until this commit, wildly inflated —
+     * readiness from their neighbours.
+     *
+     * Both are fixed by reading the series for what it is. Calories and steps
+     * are cumulative counters that cannot decrease within a day, so a smaller
+     * number is a partial report rather than a decrease: carry the running
+     * maximum. HRV and resting heart rate are point measurements that stay
+     * valid until replaced, so carry the last known value forward. The chart
+     * then ends the day on the same inputs the dashboard ring is using, which
+     * is why the two now agree.
+     */
+    const filled = [];
+    let maxCalories = 0;
+    let maxSteps = 0;
+    let lastHrv = null;
+    let lastRhr = null;
+
+    for (const snap of today) {
+      maxCalories = Math.max(maxCalories, toNumber(snap.active_calories) ?? 0);
+      maxSteps = Math.max(maxSteps, toNumber(snap.steps) ?? 0);
+      if (hasNumber(snap.hrv)) lastHrv = toNumber(snap.hrv);
+      if (hasNumber(snap.resting_hr)) lastRhr = toNumber(snap.resting_hr);
+
+      filled.push({
+        captured_at: snap.captured_at,
+        hrv: lastHrv,
+        resting_hr: lastRhr,
+        active_calories: maxCalories,
+        steps: maxSteps,
+      });
+    }
+
     const history = health.filter((r) => r.date < date);
     const sleepHistory = sleepLogs.filter((r) => r.date < date);
     const daySleep = sleepLogs.find((r) => r.date === date) ?? null;
     const dayJournal = journalLogs.find((r) => r.date === date) ?? null;
 
-    return today.map((snap) => {
+    return filled.map((snap) => {
       const at = new Date(snap.captured_at);
       // Only the workouts finished by this point in the day count towards the
       // load spent so far.
