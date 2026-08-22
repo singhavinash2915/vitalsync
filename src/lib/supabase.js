@@ -23,26 +23,28 @@ export const supabase = createClient(
   url ?? 'https://placeholder.supabase.co',
   anonKey_ ?? 'placeholder-anon-key',
   {
-    // There is no sign-in, so there is no session to keep, refresh, or read
-    // back out of a redirect URL. Every request goes out on the anon key.
+    // Reading needs no session; writing does. When one exists it has to
+    // survive closing the app, or "sign in once per device" becomes "sign in
+    // every morning".
     auth: {
-      persistSession: false,
-      autoRefreshToken: false,
-      detectSessionInUrl: false,
+      persistSession: true,
+      autoRefreshToken: true,
+      detectSessionInUrl: true,
+      storageKey: 'vitalsync-auth',
     },
   }
 );
 
 /**
- * The single account this app reads and writes.
+ * The account a signed-out visitor sees.
  *
- * VitalSync has no sign-in: it is one person's app, opened straight onto the
- * dashboard, so there is no session to derive `auth.uid()` from and every query
- * pins itself to this id instead. It is deliberately not a secret — the
- * row-level security policies grant the anonymous role access to exactly these
- * rows, so knowing the id is what makes the app work rather than what breaks it.
+ * The app opens onto this person's data with no password, which is the whole
+ * point of it being a public URL. It is deliberately not a secret: the
+ * row-level security policies grant the anonymous role SELECT on exactly these
+ * rows, so knowing the id is what makes the app work rather than what breaks
+ * it. Writing is a different matter and needs a session — see useAuthStore.
  *
- * Override with VITE_OWNER_ID if the data ever moves to another account.
+ * Override with VITE_OWNER_ID to point a fork at a different account.
  */
 export const OWNER_ID =
   import.meta.env.VITE_OWNER_ID ?? 'eb9b4bea-c04f-4906-a5fe-0acc54ffbb46';
@@ -71,7 +73,7 @@ export function describeError(error, fallback = 'Something went wrong.') {
     return 'An entry for that date already exists — it has been updated instead.';
   }
   if (error.code === '42501' || /row-level security/i.test(message)) {
-    return 'Blocked by row-level security. Apply supabase/migrations/0009_public_access.sql, which grants the anonymous role access to this account.';
+    return 'You are viewing this signed out, which is read-only. Sign in to make changes.';
   }
   if (error.code === '42P01' || /relation .* does not exist/i.test(message)) {
     return 'Database tables are missing. Run supabase/migrations/0001_init.sql in the SQL editor.';
@@ -90,6 +92,15 @@ export function describeError(error, fallback = 'Something went wrong.') {
   }
   if (error.code === '23514' || /violates check constraint/i.test(message)) {
     return 'One of those values is outside the allowed range and was rejected by the database.';
+  }
+  if (/Invalid login credentials/i.test(message)) {
+    return 'Incorrect email or password.';
+  }
+  if (/Email not confirmed/i.test(message)) {
+    return 'Check your inbox and confirm your email address before signing in.';
+  }
+  if (/User already registered/i.test(message)) {
+    return 'That email already has an account — sign in instead.';
   }
   return message || fallback;
 }

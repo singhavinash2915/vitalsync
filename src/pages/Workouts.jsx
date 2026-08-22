@@ -32,6 +32,7 @@ import {
   Badge,
   Skeleton,
 } from '../components/ui';
+import EditGate, { useCanEdit } from '../components/EditGate';
 import { calcExertionScore } from '../lib/scores';
 
 const TYPES = [
@@ -71,6 +72,7 @@ const blankWorkout = () => ({
 
 export default function Workouts() {
   const user = useAuthStore((s) => s.user);
+  const canEdit = useCanEdit();
   const profile = useAuthStore((s) => s.profile);
   const { workouts, saveWorkout, deleteWorkout, saving, loading } = useDataStore();
 
@@ -185,7 +187,8 @@ export default function Workouts() {
         </CardBody>
       </Card>
 
-      <Button size="lg" icon={Plus} className="w-full" onClick={openNew}>
+      <EditGate />
+      <Button size="lg" icon={Plus} className="w-full" onClick={openNew} disabled={!canEdit}>
         Log a workout
       </Button>
 
@@ -196,7 +199,7 @@ export default function Workouts() {
             title="No workouts logged"
             body="Sessions feed your exertion score, which in turn pulls down readiness — that is how the app knows when you need a rest day."
             action={
-              <Button size="sm" icon={Plus} onClick={openNew}>
+              <Button size="sm" icon={Plus} onClick={openNew} disabled={!canEdit}>
                 Log your first workout
               </Button>
             }

@@ -1,5 +1,6 @@
 import { create } from 'zustand';
 import { supabase, describeError } from '../lib/supabase';
+import { useAuthStore } from './useAuthStore';
 import { computeDailyScores, SCORING_VERSION } from '../lib/scores';
 import { HEALTH_COLUMNS } from '../lib/healthImport';
 import { todayKey, toKey, lastNDays, fromKey } from '../lib/dates';
@@ -14,6 +15,23 @@ import { subDays } from 'date-fns';
  */
 
 const WINDOW_DAYS = 120;
+
+/**
+ * The one place that decides whether a mutation is allowed to proceed.
+ *
+ * Reading is public; writing needs a session. Row-level security enforces this
+ * for real — a signed-out request is rejected by Postgres regardless of what
+ * the client does — but a database rejection surfaces as an opaque 401 halfway
+ * through an optimistic update. Checking first turns that into one honest
+ * sentence, and keeps ten call sites from each inventing their own guard.
+ */
+const READ_ONLY = {
+  ok: false,
+  readOnly: true,
+  message: 'You are signed out, so this view is read-only. Sign in to make changes.',
+};
+
+const canEdit = () => useAuthStore.getState().canEdit;
 
 /**
  * PostgREST caps a single response at 1,000 rows regardless of `.limit()`, so
@@ -285,6 +303,7 @@ export const useDataStore = create((set, get) => ({
    * its source rows.
    */
   recomputeDay: async (userId, date, profile) => {
+    if (!canEdit()) return READ_ONLY;
     const s = get();
     const computed = computeDailyScores({
       health: s.healthFor(date),
@@ -329,6 +348,7 @@ export const useDataStore = create((set, get) => ({
 
   /** Shared upsert path for the three one-row-per-day tables. */
   upsertDaily: async (tableName, stateKey, { userId, date, values, profile }) => {
+    if (!canEdit()) return READ_ONLY;
     set({ saving: true, error: null });
     try {
       const payload = { user_id: userId, date, ...values };
@@ -362,6 +382,10 @@ export const useDataStore = create((set, get) => ({
    * on someone finding the rebuild button.
    */
   rebuildIfScoringChanged: async (userId, profile) => {
+    // Fires automatically on load rather than from a button, so a signed-out
+    // visitor must get silence here, not an error banner over someone else's
+    // dashboard. The scores they see are computed live for display anyway.
+    if (!canEdit()) return { rebuilt: 0 };
     if (!userId || !profile) return { ok: true, skipped: true };
     if (Number(profile.scoring_version) === SCORING_VERSION) return { ok: true, skipped: true };
 
@@ -382,6 +406,7 @@ export const useDataStore = create((set, get) => ({
    * activity or the date range moves.
    */
   savePlanBlock: async ({ userId, block }) => {
+    if (!canEdit()) return READ_ONLY;
     set({ saving: true, error: null });
     try {
       await supabase
@@ -421,6 +446,7 @@ export const useDataStore = create((set, get) => ({
   },
 
   deletePlanBlock: async ({ userId, block }) => {
+    if (!canEdit()) return READ_ONLY;
     const previous = get().plan;
     set((state) => ({ plan: state.plan.filter((r) => r.starts_on !== block.starts_on) }));
 
@@ -444,6 +470,7 @@ export const useDataStore = create((set, get) => ({
   // --- workouts (many rows per day) ----------------------------------------
 
   saveWorkout: async ({ userId, workout, profile }) => {
+    if (!canEdit()) return READ_ONLY;
     set({ saving: true, error: null });
     try {
       const payload = { ...workout, user_id: userId };
@@ -469,6 +496,7 @@ export const useDataStore = create((set, get) => ({
   },
 
   deleteWorkout: async ({ userId, id, date, profile }) => {
+    if (!canEdit()) return READ_ONLY;
     const previous = get().workouts;
     set((state) => ({ workouts: state.workouts.filter((w) => w.id !== id) }));
 
@@ -483,6 +511,7 @@ export const useDataStore = create((set, get) => ({
   },
 
   deleteDaily: async (tableName, stateKey, { userId, date, profile }) => {
+    if (!canEdit()) return READ_ONLY;
     const previous = get()[stateKey];
     set((state) => ({ [stateKey]: state[stateKey].filter((r) => r.date !== date) }));
 
@@ -509,6 +538,7 @@ export const useDataStore = create((set, get) => ({
    * sleep quality you rated by hand on the same day.
    */
   importHealthExport: async ({ userId, days, workouts = [], profile, onProgress }) => {
+    if (!canEdit()) return READ_ONLY;
     set({ saving: true, error: null });
 
     const state = get();
@@ -644,6 +674,7 @@ export const useDataStore = create((set, get) => ({
    * (which shifts exertion, and therefore readiness, for every day).
    */
   recomputeAll: async (userId, profile) => {
+    if (!canEdit()) return READ_ONLY;
     set({ saving: true, error: null });
     const s = get();
     const dates = [

@@ -18,6 +18,7 @@ import {
   Trash2,
 } from 'lucide-react';
 
+import { Link } from 'react-router-dom';
 import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
 import { functionsBaseUrl, supabase, describeError, anonKey } from '../lib/supabase';
@@ -36,6 +37,7 @@ import {
   Segmented,
   Badge,
 } from '../components/ui';
+import EditGate, { useCanEdit } from '../components/EditGate';
 import ImportHealthModal from '../components/ImportHealthModal';
 import { SyncPanel } from '../components/SyncStatus';
 
@@ -96,7 +98,8 @@ function CopyRow({ label, value, secret = false }) {
 }
 
 export default function Settings() {
-  const { profile, user, updateProfile } = useAuthStore();
+  const { profile, user, updateProfile, signOut } = useAuthStore();
+  const canEdit = useCanEdit();
   const { health, sleep, workouts, journal, scores, recomputeAll, saving, loadAll } = useDataStore();
   const { theme, setTheme } = useTheme();
 
@@ -137,10 +140,14 @@ export default function Settings() {
     setKeyBusy(true);
     setStatus({ tone: null, message: '' });
     try {
+      const { data: sessionData } = await supabase.auth.getSession();
+      const accessToken = sessionData.session?.access_token;
+      if (!accessToken) throw new Error('Sign in first — a sync key is minted for your account.');
+
       const response = await fetch(`${functionsBaseUrl}/health-sync?action=create-key`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${anonKey}`,
+          Authorization: `Bearer ${accessToken}`,
           apikey: anonKey,
           'Content-Type': 'application/json',
         },
@@ -309,6 +316,7 @@ export default function Settings() {
       <Card>
         <CardHeader title="Profile" subtitle={user?.email} icon={User} />
         <CardBody>
+          <EditGate className="mb-3" />
           <form onSubmit={saveProfile} className="space-y-3">
             <Field label="Name">
               <Input value={form.name} onChange={set('name')} placeholder="Your name" />
@@ -391,7 +399,7 @@ export default function Settings() {
 
             {status.message ? <Alert tone={status.tone}>{status.message}</Alert> : null}
 
-            <Button type="submit" loading={busy || saving} icon={Save} className="w-full">
+            <Button type="submit" loading={busy || saving} icon={Save} className="w-full" disabled={!canEdit}>
               Save profile
             </Button>
           </form>
@@ -592,14 +600,27 @@ export default function Settings() {
       </Card>
 
       <Card>
-        <CardHeader title="Who can see this" subtitle="No sign-in, by design" icon={Globe} />
-        <CardBody>
+        <CardHeader title="Who can see this" subtitle="Public to read, yours to change" icon={Globe} />
+        <CardBody className="space-y-3">
           <p className="muted text-xs leading-relaxed">
-            This app has no password. Anyone who opens its address sees your health history and can
-            change or delete it, and the same is true of anything they point at the database
-            directly. That is the trade for opening straight onto the dashboard. Keep an export
-            somewhere safe — deletion here has no undo.
+            Anyone who opens this address can read your health history — that is deliberate, and why
+            there is no login screen. Nobody can change or delete any of it without signing in as
+            you. Keep an export somewhere safe anyway: the free Supabase plan has no backups.
           </p>
+          {canEdit ? (
+            <>
+              <p className="muted text-[11px]">
+                Signed in as <span className="font-semibold">{user?.email}</span>.
+              </p>
+              <Button variant="secondary" className="w-full" onClick={signOut}>
+                Sign out
+              </Button>
+            </>
+          ) : (
+            <Link to="/signin" className="block">
+              <Button className="w-full">Sign in to edit</Button>
+            </Link>
+          )}
         </CardBody>
       </Card>
 

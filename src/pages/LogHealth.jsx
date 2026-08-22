@@ -16,6 +16,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
 import { todayKey, isFutureKey, relativeDay } from '../lib/dates';
 import { Card, CardHeader, CardBody, Button, Input, Field, Alert, Badge } from '../components/ui';
+import EditGate, { useCanEdit } from '../components/EditGate';
 import { mean } from '../lib/scores';
 
 const FIELDS = [
@@ -79,6 +80,7 @@ const emptyForm = () =>
 export default function LogHealth() {
   const navigate = useNavigate();
   const user = useAuthStore((s) => s.user);
+  const canEdit = useCanEdit();
   const profile = useAuthStore((s) => s.profile);
   const { saveHealth, deleteDaily, healthFor, saving, health } = useDataStore();
 
@@ -179,6 +181,7 @@ export default function LogHealth() {
             />
           </Field>
 
+          <EditGate className="mb-3" />
           <form onSubmit={submit} className="space-y-3">
             {FIELDS.map((field) => {
               const baseline = baselines[field.key];
@@ -218,11 +221,11 @@ export default function LogHealth() {
             {status.message ? <Alert tone={status.tone}>{status.message}</Alert> : null}
 
             <div className="flex gap-2 pt-1">
-              <Button type="submit" size="lg" loading={saving} icon={Save} className="flex-1">
+              <Button type="submit" size="lg" loading={saving} icon={Save} className="flex-1" disabled={!canEdit}>
                 Save
               </Button>
               {existing ? (
-                <Button type="button" variant="danger" size="lg" icon={Trash2} onClick={remove}>
+                <Button type="button" variant="danger" size="lg" icon={Trash2} onClick={remove} disabled={!canEdit}>
                   Delete
                 </Button>
               ) : null}

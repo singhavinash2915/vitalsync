@@ -7,6 +7,7 @@ import { useAuthStore } from './store/useAuthStore';
 import { useDataStore } from './store/useDataStore';
 import { isSupabaseConfigured } from './lib/supabase';
 
+import SignIn from './pages/SignIn';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import LogHealth from './pages/LogHealth';
@@ -105,6 +106,7 @@ export default function App() {
     <Routes>
       {/* Reachable from Settings, never forced. Height, weight and goal sharpen
           the calorie target; nothing breaks while they are unset. */}
+      <Route path="/signin" element={<SignIn />} />
       <Route
         path="/welcome"
         element={!profile ? <FullScreenLoader message="Loading your profile…" /> : <Onboarding />}

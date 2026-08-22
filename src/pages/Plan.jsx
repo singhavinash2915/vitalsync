@@ -14,6 +14,7 @@ import {
   Badge,
   Skeleton,
 } from '../components/ui';
+import EditGate, { useCanEdit } from '../components/EditGate';
 
 /**
  * Weekly training blocks.
@@ -117,6 +118,7 @@ function BlockEditor({ block, onSave, onDelete, saving }) {
 
 export default function Plan() {
   const user = useAuthStore((s) => s.user);
+  const canEdit = useCanEdit();
   const { plan, savePlanBlock, deletePlanBlock, loading, saving } = useDataStore();
   const [editing, setEditing] = useState(null);
   const [status, setStatus] = useState({ tone: null, message: '' });
@@ -201,7 +203,7 @@ export default function Plan() {
                     {block.start_time ? ` · ${block.start_time.slice(0, 5)}` : ''}
                   </p>
                 </div>
-                <Button size="sm" variant="secondary" onClick={() => setEditing(block)}>
+                <Button size="sm" variant="secondary" onClick={() => setEditing(block)} disabled={!canEdit}>
                   Edit
                 </Button>
               </div>
@@ -225,7 +227,8 @@ export default function Plan() {
             </Card>
           ))}
 
-          <Button icon={Plus} className="w-full" onClick={() => setEditing(blank)}>
+          <EditGate className="mb-3" />
+          <Button icon={Plus} className="w-full" onClick={() => setEditing(blank)} disabled={!canEdit}>
             {blocks.length ? 'Add another block' : 'Create your first block'}
           </Button>
 

@@ -355,13 +355,6 @@ const sha256 = async (text: string) => {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 };
 
-/**
- * The single account this instance serves. VitalSync has no sign-in, so there
- * is no session to read an id from. Override with VITALSYNC_OWNER_ID.
- */
-const OWNER_ID =
-  Deno.env.get('VITALSYNC_OWNER_ID') ?? 'eb9b4bea-c04f-4906-a5fe-0acc54ffbb46';
-
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed. Use POST.' }, 405);
@@ -427,30 +420,34 @@ Deno.serve(async (req: Request) => {
       auth: { persistSession: false, autoRefreshToken: false },
     });
 
+    // The anon key is public and identifies nobody. Accepting it here — as an
+    // earlier build briefly did — let anyone mint a working sync key for the
+    // owner through ?action=create-key, and write whatever they liked with it.
     if (bearer === anonKey) {
-      // The app has no sign-in, so there is no user token to send and
-      // `getUser()` would find nobody behind the anon key. Row-level security
-      // scopes the anon role to this one account anyway, so the anon key now
-      // identifies the owner as surely as a session used to.
-      userId = OWNER_ID;
-      db = client;
-    } else {
-      const {
-        data: { user },
-        error,
-      } = await client.auth.getUser();
-
-      if (error || !user) {
-        return json({ error: 'Invalid or expired token.', detail: error?.message }, 401);
-      }
-      userId = user.id;
-      db = client;
+      return json(
+        {
+          error: 'The anon key is not a credential.',
+          hint: 'Send a signed-in user access token, or X-Sync-Key: <key>.',
+        },
+        401
+      );
     }
+
+    const {
+      data: { user },
+      error,
+    } = await client.auth.getUser();
+
+    if (error || !user) {
+      return json({ error: 'Invalid or expired token.', detail: error?.message }, 401);
+    }
+    userId = user.id;
+    db = client;
   } else {
     return json(
       {
         error: 'Missing credentials.',
-        hint: 'Send X-Sync-Key: <key> (recommended) or Authorization: Bearer <anon key>.',
+        hint: 'Send X-Sync-Key: <key> (recommended) or Authorization: Bearer <access token>.',
       },
       401
     );

@@ -307,6 +307,21 @@ export function prescribeSession({
 }
 
 /**
+ * Best available description of the athlete when the profile does not say.
+ *
+ * The plan is the most honest signal we have: somebody with cricket days in
+ * their week is training for cricket, and somebody with only gym days is not.
+ */
+function describeAthlete(plan = []) {
+  const activities = new Set(plan.map((b) => b.activity).filter(Boolean));
+  if (activities.has('cricket')) {
+    return 'cricket all-rounder — bats, bowls seam, 16-over matches on open ground';
+  }
+  if (activities.has('gym')) return 'trains in the gym, no sport specified';
+  return 'general fitness, no sport specified';
+}
+
+/**
  * Compact, factual brief handed to the language model so its answers are about
  * this body and not about bodies in general. Kept small and pre-summarised on
  * purpose: raw rows would blow the context and invite invention.
@@ -326,7 +341,9 @@ export function coachContext({ health = [], sleep = [], scores = [], findings = 
   return {
     today: todayKey(),
     age: profile ? ageFrom(profile) : null,
-    athlete: 'cricket all-rounder — bats, bowls seam, 16-over matches on open ground',
+    // Describes whoever is signed in, not whoever built the app — a second
+    // account must not be coached as a cricketer because the owner is one.
+    athlete: profile?.sport?.trim() || describeAthlete(plan),
     latest: {
       date: todayHealth?.date ?? null,
       hrv: todayHealth?.hrv ?? null,

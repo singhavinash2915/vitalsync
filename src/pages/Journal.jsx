@@ -29,6 +29,7 @@ import {
   EmptyState,
   Skeleton,
 } from '../components/ui';
+import EditGate, { useCanEdit } from '../components/EditGate';
 
 const STRESS_LABELS = ['Very calm', 'Calm', 'Neutral', 'Stressed', 'Overwhelmed'];
 const DIET_LABELS = ['Very poor', 'Poor', 'Average', 'Good', 'Excellent'];
@@ -44,6 +45,7 @@ const blank = () => ({
 
 export default function Journal() {
   const user = useAuthStore((s) => s.user);
+  const canEdit = useCanEdit();
   const profile = useAuthStore((s) => s.profile);
   const { journal, saveJournal, deleteDaily, saving, loading } = useDataStore();
 
@@ -124,6 +126,7 @@ export default function Journal() {
           action={existing ? <Badge color="#22c55e">Logged</Badge> : null}
         />
         <CardBody>
+          <EditGate className="mb-3" />
           <form onSubmit={submit} className="space-y-4">
             <Field label="Date">
               <Input
@@ -218,11 +221,11 @@ export default function Journal() {
             {status.message ? <Alert tone={status.tone}>{status.message}</Alert> : null}
 
             <div className="flex gap-2">
-              <Button type="submit" size="lg" loading={saving} icon={Save} className="flex-1">
+              <Button type="submit" size="lg" loading={saving} icon={Save} className="flex-1" disabled={!canEdit}>
                 Save entry
               </Button>
               {existing ? (
-                <Button type="button" variant="danger" size="lg" icon={Trash2} onClick={remove}>
+                <Button type="button" variant="danger" size="lg" icon={Trash2} onClick={remove} disabled={!canEdit}>
                   Delete
                 </Button>
               ) : null}

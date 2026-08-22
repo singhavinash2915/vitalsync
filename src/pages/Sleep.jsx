@@ -29,6 +29,7 @@ import {
   EmptyState,
   Skeleton,
 } from '../components/ui';
+import EditGate, { useCanEdit } from '../components/EditGate';
 import ChartTooltip from '../components/ChartTooltip';
 import SleepStages from '../components/SleepStages';
 
@@ -36,6 +37,7 @@ const QUALITY_LABELS = ['Terrible', 'Poor', 'OK', 'Good', 'Excellent'];
 
 export default function Sleep() {
   const user = useAuthStore((s) => s.user);
+  const canEdit = useCanEdit();
   const profile = useAuthStore((s) => s.profile);
   const { sleep, saveSleep, deleteDaily, saving, loading, series } = useDataStore();
   // Needed in the chart memo below — `series` itself is a stable method and
@@ -162,6 +164,7 @@ export default function Sleep() {
       <Card delay={60}>
         <CardHeader title="Log sleep" subtitle="Last night, or any past night" icon={BedDouble} />
         <CardBody>
+          <EditGate className="mb-3" />
           <form onSubmit={submit} className="space-y-4">
             <Field label="Night of" hint="the morning you woke up">
               <Input
@@ -237,11 +240,11 @@ export default function Sleep() {
             {status.message ? <Alert tone={status.tone}>{status.message}</Alert> : null}
 
             <div className="flex gap-2">
-              <Button type="submit" size="lg" loading={saving} icon={Save} className="flex-1">
+              <Button type="submit" size="lg" loading={saving} icon={Save} className="flex-1" disabled={!canEdit}>
                 Save
               </Button>
               {existing ? (
-                <Button type="button" variant="danger" size="lg" icon={Trash2} onClick={remove}>
+                <Button type="button" variant="danger" size="lg" icon={Trash2} onClick={remove} disabled={!canEdit}>
                   Delete
                 </Button>
               ) : null}

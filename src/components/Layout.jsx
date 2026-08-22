@@ -1,10 +1,11 @@
 import { Link, useLocation } from 'react-router-dom';
-import { Activity, Moon, Sun, Settings as SettingsIcon, WifiOff } from 'lucide-react';
+import { Activity, Moon, Sun, Settings as SettingsIcon, WifiOff, Eye } from 'lucide-react';
 import { useEffect, useState } from 'react';
 import BottomNav from './BottomNav';
 import { useTheme } from '../context/ThemeContext';
 import { Alert } from './ui';
 import { useDataStore } from '../store/useDataStore';
+import { useAuthStore } from '../store/useAuthStore';
 
 const TITLES = {
   '/': 'VitalSync',
@@ -15,6 +16,7 @@ const TITLES = {
   '/biology': 'Biology',
   '/coach': 'AI Trainer',
   '/insights': 'What your data says',
+  '/signin': 'Sign in',
   '/plan': 'Training plan',
   '/log': 'Log health data',
   '/settings': 'Settings',
@@ -40,6 +42,7 @@ export default function Layout({ children }) {
   const { isDark, toggle } = useTheme();
   const online = useOnlineStatus();
   const error = useDataStore((s) => s.error);
+  const canEdit = useAuthStore((s) => s.canEdit);
   const setError = () => useDataStore.setState({ error: null });
 
   return (
@@ -62,6 +65,15 @@ export default function Layout({ children }) {
           </Link>
 
           <div className="flex items-center gap-1">
+            {!canEdit ? (
+              <Link
+                to="/signin"
+                title="You are signed out. Reading is open to everyone; changing things is not."
+                className="flex items-center gap-1 rounded-full bg-accent/12 px-2 py-1 text-[10px] font-semibold text-accent"
+              >
+                <Eye size={11} aria-hidden="true" /> Read-only
+              </Link>
+            ) : null}
             {!online ? (
               <span className="flex items-center gap-1 rounded-full bg-score-moderate/15 px-2 py-1 text-[10px] font-semibold text-score-moderate">
                 <WifiOff size={11} aria-hidden="true" /> Offline
