@@ -26,6 +26,7 @@ import { SyncStrip } from '../components/SyncStatus';
 import { Sparkline, TrendDelta } from '../components/Sparkline';
 import ScoreDetailSheet from '../components/ScoreDetailSheet';
 import ReadinessToday from '../components/ReadinessToday';
+import ReadinessWeek from '../components/ReadinessWeek';
 import TodaySession from '../components/TodaySession';
 
 /**
@@ -273,6 +274,8 @@ export default function Dashboard() {
         </div>
       </Card>
 
+      <ReadinessWeek />
+      {/* Only renders once a day has two or more synced snapshots. */}
       <ReadinessToday />
 
       {/* ---------------- Today's raw numbers ---------------- */}

@@ -519,6 +519,23 @@ export const useDataStore = create((set, get) => ({
         onProgress?.(Math.min(i + CHUNK, workoutRows.length), workoutRows.length, 'workout_logs');
       }
 
+      // Record an intraday snapshot for today if this import carried it.
+      // Snapshots were previously written only by the sync endpoint, so anyone
+      // importing a file by hand never accumulated any.
+      const todayRow = healthRows.find((r) => r.date === todayKey());
+      if (todayRow) {
+        await supabase.from('health_snapshots').insert({
+          user_id: userId,
+          date: todayRow.date,
+          hrv: todayRow.hrv ?? null,
+          resting_hr: todayRow.resting_hr ?? null,
+          active_calories: todayRow.active_calories ?? null,
+          steps: todayRow.steps ?? null,
+          sleep_hours: sleepRows.find((r) => r.date === todayRow.date)?.duration_hours ?? null,
+          source: 'import',
+        });
+      }
+
       // Re-read rather than patching local state by hand: the server owns
       // generated ids and timestamps, and the score rebuild below needs the
       // full history in order to compute rolling baselines correctly.
