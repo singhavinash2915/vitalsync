@@ -190,9 +190,6 @@ export default function Dashboard() {
     <div className="space-y-4">
       <SyncStrip />
 
-      {/* The decision comes before the data that produced it. */}
-      <TodaySession computed={computed} health={dayHealth} sleep={daySleep} />
-
       {/* ---------------- Hero: readiness ---------------- */}
       <Card className="overflow-hidden">
         <div className="flex flex-col items-center px-4 pb-5 pt-6">
@@ -276,6 +273,15 @@ export default function Dashboard() {
       </Card>
 
       <ReadinessWeek />
+
+      {/*
+        The score, then the week it sits in, then what to do about it. Today's
+        number means little without the week behind it — a 22 after a run of
+        50s is a different morning from the third 22 in a row — so the verdict
+        reads better once both are already on screen.
+      */}
+      <TodaySession computed={computed} health={dayHealth} sleep={daySleep} />
+
       {/* Only renders once a day has two or more synced snapshots. */}
       <ReadinessToday />
 
