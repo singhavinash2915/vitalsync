@@ -1,4 +1,4 @@
-import { mean, BASELINE_DAYS, MIN_BASELINE_DAYS } from './scores';
+import { mean, BASELINE_DAYS, MIN_BASELINE_DAYS, toNumber, hasNumber } from './scores';
 
 /**
  * Biomarkers describe the state of the body rather than the effort of a day.
@@ -153,9 +153,8 @@ export function summariseBiomarkers(history = [], profile = null) {
     // recorded every few weeks, so most days are null — the latest value read
     // 0.0 and the average collapsed. Reject the raw value first.
     const readings = sorted
-      .filter((row) => row[marker.key] !== null && row[marker.key] !== undefined && row[marker.key] !== '')
-      .map((row) => ({ date: row.date, value: Number(row[marker.key]) }))
-      .filter((r) => Number.isFinite(r.value));
+      .filter((row) => hasNumber(row[marker.key]))
+      .map((row) => ({ date: row.date, value: toNumber(row[marker.key]) }));
 
     if (!readings.length) return { ...marker, hasData: false };
 

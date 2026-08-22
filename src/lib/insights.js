@@ -1,4 +1,4 @@
-import { mean, bandFor, BASELINE_DAYS, MIN_BASELINE_DAYS } from './scores';
+import { mean, bandFor, toNumber, hasNumber, BASELINE_DAYS, MIN_BASELINE_DAYS } from './scores';
 import { formatHours, relativeDay } from './dates';
 
 /**
@@ -81,8 +81,8 @@ export function buildInsights({ today, history = [], sleepToday, sleepHistory = 
   }
 
   // --- Sleep ----------------------------------------------------------------
-  if (Number.isFinite(Number(sleepToday?.duration_hours))) {
-    const hours = Number(sleepToday.duration_hours);
+  if (hasNumber(sleepToday?.duration_hours)) {
+    const hours = toNumber(sleepToday.duration_hours);
     if (hours < 6) {
       insights.push({
         priority: 1,
@@ -196,18 +196,20 @@ export function weeklySummary(scores = []) {
 /** Personal records across everything logged so far. */
 export function personalRecords({ health = [], sleep = [], workouts = [], scores = [] }) {
   const best = (rows, key, direction = 'max') => {
-    const valid = rows.filter((r) => Number.isFinite(Number(r[key])));
+    // Days with no reading must be excluded, not read as zero — otherwise
+    // every "lowest" record is won by an absent value.
+    const valid = rows.filter((r) => hasNumber(r[key]));
     if (!valid.length) return null;
     const winner = valid.reduce((acc, row) =>
       direction === 'max'
-        ? Number(row[key]) > Number(acc[key])
+        ? toNumber(row[key]) > toNumber(acc[key])
           ? row
           : acc
-        : Number(row[key]) < Number(acc[key])
+        : toNumber(row[key]) < toNumber(acc[key])
           ? row
           : acc
     );
-    return { value: Number(winner[key]), date: winner.date, when: relativeDay(winner.date) };
+    return { value: toNumber(winner[key]), date: winner.date, when: relativeDay(winner.date) };
   };
 
   return [

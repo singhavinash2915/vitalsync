@@ -7,7 +7,7 @@ import { useAuthStore } from './store/useAuthStore';
 import { useDataStore } from './store/useDataStore';
 import { isSupabaseConfigured } from './lib/supabase';
 
-import Login from './pages/Login';
+import Unlock from './pages/Unlock';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import LogHealth from './pages/LogHealth';
@@ -16,6 +16,8 @@ import Sleep from './pages/Sleep';
 import Journal from './pages/Journal';
 import Trends from './pages/Trends';
 import Biomarkers from './pages/Biomarkers';
+import Coach from './pages/Coach';
+import Insights from './pages/Insights';
 import Plan from './pages/Plan';
 import Settings from './pages/Settings';
 import SetupRequired from './pages/SetupRequired';
@@ -31,19 +33,23 @@ function FullScreenLoader({ message = 'Loading VitalSync…' }) {
   );
 }
 
-/** Gate for every authenticated screen; also forces onboarding to complete. */
+/**
+ * Gate for every screen.
+ *
+ * There is no sign-up, no account switching and no onboarding wall — this is a
+ * single-user app, so the only question is whether this device already holds a
+ * session. It nearly always does, and the unlock screen is a once-per-device
+ * event rather than something seen on launch.
+ */
 function Protected({ children }) {
-  const { user, profile, initialising } = useAuthStore();
+  const { user, initialising } = useAuthStore();
   const location = useLocation();
 
   // Restoring a session is a local read plus a token refresh; showing the
-  // login screen during it would make a signed-in user think they had been
+  // unlock screen during it would make a signed-in user think they had been
   // signed out.
-  if (initialising) return <FullScreenLoader message="Restoring your session…" />;
-  if (!user) return <Navigate to="/login" replace state={{ from: location }} />;
-  if (profile && useAuthStore.getState().needsOnboarding() && location.pathname !== '/welcome') {
-    return <Navigate to="/welcome" replace />;
-  }
+  if (initialising) return <FullScreenLoader message="Opening VitalSync…" />;
+  if (!user) return <Navigate to="/unlock" replace state={{ from: location }} />;
   return <Layout>{children}</Layout>;
 }
 
@@ -101,12 +107,14 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/login" element={user ? <Navigate to="/" replace /> : <Login />} />
+      <Route path="/unlock" element={user ? <Navigate to="/" replace /> : <Unlock />} />
+      {/* Reachable from Settings, never forced. Height, weight and goal sharpen
+          the calorie target; nothing breaks while they are unset. */}
       <Route
         path="/welcome"
         element={
           !user ? (
-            <Navigate to="/login" replace />
+            <Navigate to="/unlock" replace />
           ) : !profile ? (
             <FullScreenLoader message="Loading your profile…" />
           ) : (
@@ -122,6 +130,8 @@ export default function App() {
       <Route path="/journal" element={<Protected><Journal /></Protected>} />
       <Route path="/trends" element={<Protected><Trends /></Protected>} />
       <Route path="/biology" element={<Protected><Biomarkers /></Protected>} />
+      <Route path="/coach" element={<Protected><Coach /></Protected>} />
+      <Route path="/insights" element={<Protected><Insights /></Protected>} />
       <Route path="/plan" element={<Protected><Plan /></Protected>} />
       <Route path="/settings" element={<Protected><Settings /></Protected>} />
 

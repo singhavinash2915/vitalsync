@@ -72,6 +72,27 @@ export function exertionLabel(score) {
   return 'Rest day';
 }
 
+/**
+ * Number() that does not lie about absent values.
+ *
+ * `Number(null)` is 0 and `Number.isFinite(0)` is true, so the obvious
+ * `Number.isFinite(Number(row.x))` treats every missing reading as a real zero.
+ * That has produced a "lowest resting heart rate: 0 bpm" record, a VO2 max of
+ * 0.0, a resting HR "56 above baseline", and a batch of rows rejected by a
+ * database check constraint. Route every read of a possibly-absent DB value
+ * through here.
+ *
+ * @returns {number|null} the number, or null if there was nothing to read
+ */
+export function toNumber(value) {
+  if (value === null || value === undefined || value === '') return null;
+  const n = Number(value);
+  return Number.isFinite(n) ? n : null;
+}
+
+/** True when `value` holds a real, usable number. */
+export const hasNumber = (value) => toNumber(value) !== null;
+
 export function clamp(n, min, max) {
   if (!Number.isFinite(n)) return min;
   return Math.min(max, Math.max(min, n));
@@ -227,7 +248,7 @@ export function sleepQualityFromStages({ duration_hours, deep_hours, rem_hours, 
   if (Number.isFinite(rem)) {
     parts.push({ value: clamp((rem / total / 0.2) * 100, 0, 100), weight: 0.35 });
   }
-  if (Number.isFinite(Number(awake_hours))) {
+  if (hasNumber(awake_hours)) {
     const efficiency = total / (total + Number(awake_hours));
     // 80% efficiency scores 0, 100% scores 100 — below 80 is broken sleep.
     parts.push({ value: clamp(((efficiency - 0.8) / 0.2) * 100, 0, 100), weight: 0.25 });
@@ -439,7 +460,7 @@ export function computeDailyScores({
 
   // Exertion is only meaningful if we know something about the day's output.
   // With neither calories nor a workout it is unknown, not zero.
-  const hasExertionInput = Number.isFinite(Number(health?.active_calories)) || workouts.length > 0;
+  const hasExertionInput = hasNumber(health?.active_calories) || workouts.length > 0;
   const exertion = calcExertionScore({
     activeCalories: health?.active_calories,
     workouts,
@@ -449,7 +470,7 @@ export function computeDailyScores({
   // Recovery falls back to a neutral 50 with no baseline; that is a genuine
   // estimate, but with no HRV *or* resting HR at all there is nothing to score.
   const hasRecoveryInput =
-    Number.isFinite(Number(health?.hrv)) || Number.isFinite(Number(health?.resting_hr));
+    hasNumber(health?.hrv) || hasNumber(health?.resting_hr);
 
   const readiness = calcReadinessScore({
     recovery: hasRecoveryInput ? recovery.score : null,

@@ -5,7 +5,7 @@ import clsx from 'clsx';
 
 import { useDataStore } from '../store/useDataStore';
 import { ACTIVITIES, sessionFor, guidanceFor, consecutiveLowDays } from '../lib/training';
-import { scoreColor } from '../lib/scores';
+import { scoreColor, toNumber } from '../lib/scores';
 import { todayKey } from '../lib/dates';
 import { Card, CardBody, Badge } from './ui';
 
@@ -60,9 +60,11 @@ export default function TodaySession({ computed, health, sleep }) {
       // you have already spent, which is what makes a 7pm session different.
       loadSoFar: computed?.exertion_score,
       sleepHours: sleep?.duration_hours,
+      // A missing baseline must stay missing. Coercing it to 0 turns "56 bpm"
+      // into "56 above baseline" and fires the illness warning every morning.
       restingHrDelta:
-        Number.isFinite(Number(health?.resting_hr)) && Number.isFinite(Number(baselineRhr))
-          ? Number(health.resting_hr) - Number(baselineRhr)
+        toNumber(health?.resting_hr) !== null && toNumber(baselineRhr)
+          ? toNumber(health.resting_hr) - toNumber(baselineRhr)
           : null,
       consecutiveLowDays: consecutiveLowDays(scores.filter((s) => s.date < todayKey())),
     });

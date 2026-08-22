@@ -22,6 +22,7 @@ import { todayKey, prettyDateLong, formatHours } from '../lib/dates';
 import { ScoreRing, ScoreBar } from '../components/ScoreRing';
 import { Card, CardHeader, CardBody, Button, Skeleton, EmptyState, Badge } from '../components/ui';
 import { InsightsList, WeeklySummaryCard, PersonalRecordsCard } from '../components/InsightsPanel';
+import DiscoveredFindingsCard from '../components/DiscoveredFindingsCard';
 import { SyncStrip } from '../components/SyncStatus';
 import { Sparkline, TrendDelta } from '../components/Sparkline';
 import ScoreDetailSheet from '../components/ScoreDetailSheet';
@@ -428,6 +429,7 @@ export default function Dashboard() {
       ) : null}
 
       <InsightsList insights={insights} />
+      <DiscoveredFindingsCard health={health} sleep={sleepLogs} />
       <WeeklySummaryCard summary={summary} />
       <PersonalRecordsCard records={records} />
 

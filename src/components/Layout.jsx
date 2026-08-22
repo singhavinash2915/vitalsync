@@ -13,6 +13,8 @@ const TITLES = {
   '/journal': 'Journal',
   '/trends': 'Trends',
   '/biology': 'Biology',
+  '/coach': 'AI Trainer',
+  '/insights': 'What your data says',
   '/plan': 'Training plan',
   '/log': 'Log health data',
   '/settings': 'Settings',

@@ -7,3 +7,9 @@ project_id = "vbyhumvshwsvbjtpwrmx"
 # caller itself, either by looking the sync key up against its SHA-256 hash or
 # by validating a Supabase access token. Requests with neither get a 401.
 verify_jwt = false
+
+[functions.ai-coach]
+# Unlike health-sync, this one does NOT authenticate callers itself, and every
+# request it accepts spends money at Anthropic. Let Supabase reject anything
+# without a valid access token before it reaches the function.
+verify_jwt = true

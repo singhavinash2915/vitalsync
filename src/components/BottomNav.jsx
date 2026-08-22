@@ -1,12 +1,12 @@
 import { NavLink } from 'react-router-dom';
 import clsx from 'clsx';
-import { Home, Dumbbell, Moon, NotebookPen, LineChart, HeartPulse } from 'lucide-react';
+import { Home, Sparkles, Dumbbell, Moon, LineChart, HeartPulse } from 'lucide-react';
 
 const TABS = [
   { to: '/', label: 'Home', icon: Home, end: true },
+  { to: '/coach', label: 'Coach', icon: Sparkles },
   { to: '/workouts', label: 'Workouts', icon: Dumbbell },
   { to: '/sleep', label: 'Sleep', icon: Moon },
-  { to: '/journal', label: 'Journal', icon: NotebookPen },
   { to: '/trends', label: 'Trends', icon: LineChart },
   { to: '/biology', label: 'Biology', icon: HeartPulse },
 ];
