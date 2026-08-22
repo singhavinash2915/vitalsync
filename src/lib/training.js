@@ -100,6 +100,17 @@ const GYM = {
       'Twenty minutes is a complete session today',
     ],
   },
+  critical: {
+    headline: 'Skip it today',
+    detail:
+      'This is not a "go lighter" day. At this level there is no adaptation to be had — a session now only deepens the hole, and it is where strains and illness start.',
+    actions: [
+      'No lifting at all, not even light — the bar is not the problem, the recovery is',
+      'A twenty-minute easy walk if you want to move, nothing that raises your breathing',
+      'Eat a proper meal and get to bed an hour early',
+      'Nothing is lost. One skipped session costs you nothing; training through this costs a week',
+    ],
+  },
 };
 
 /**
@@ -150,6 +161,17 @@ const CRICKET = {
       'Extra fluid and salt before you start — open ground, no shade',
     ],
   },
+  critical: {
+    headline: 'Bat and field only — do not bowl',
+    detail:
+      'Sixteen overs in the field is already more than this body should be doing. Bowling on top of it, in open sun, is how side strains and back injuries happen.',
+    actions: [
+      'No overs at all. Tell the captain before the toss, not at the change',
+      'Bat if needed, field at slip or point — nothing in the deep',
+      'If this is not a fixture you have to play, sit it out',
+      'If you feel any tightness, come off. This is not the day to push through it',
+    ],
+  },
 };
 
 const REST = {
@@ -178,6 +200,16 @@ const REST = {
       'If this is a third low day, ease off the next session too',
     ],
   },
+  critical: {
+    headline: 'Something is going on',
+    detail:
+      'A reading this low on a day you have not trained is not training fatigue. The usual causes are an infection coming on, a badly broken night, alcohol, or real stress.',
+    actions: [
+      'Complete rest, and treat tomorrow as a rest day too unless it recovers',
+      'Check your resting heart rate — if it is also up, assume you are getting ill',
+      'If it stays here for three days with no obvious cause, see a doctor',
+    ],
+  },
 };
 
 const LIBRARY = { gym: GYM, cricket: CRICKET, rest: REST, run: GYM, other: GYM };
@@ -202,9 +234,23 @@ export function guidanceFor(readiness, activity = 'gym', context = {}) {
     };
   }
 
-  const band = bandFor(readiness).key;
-  const base = LIBRARY[key][band];
+  // The published bands stop at "poor" for everything under 40, which is far
+  // too wide at the bottom: 38 and 18 are not the same morning. Anything under
+  // 25 gets its own tier, because the honest advice there is to not train
+  // rather than to train lighter.
+  const CRITICAL_BELOW = 25;
+
+  const { effective, adjustment, partOfDay } = adjustForTimeOfDay(readiness, context);
+  const band = effective < CRITICAL_BELOW ? 'critical' : bandFor(effective).key;
+  const base = LIBRARY[key][band] ?? LIBRARY[key].poor;
   const flags = [];
+
+  if (adjustment < -2) {
+    flags.push({
+      tone: 'warn',
+      text: `You started today at ${readiness} but have already spent a lot of it — for a session now, treat yourself as about ${effective}.`,
+    });
+  }
 
   // Signals that matter more than the headline number.
   if (Number(context.sleepHours) > 0 && Number(context.sleepHours) < 6) {
@@ -232,7 +278,39 @@ export function guidanceFor(readiness, activity = 'gym', context = {}) {
     });
   }
 
-  return { ...base, band, flags };
+  return { ...base, band, flags, effective, partOfDay, adjustment };
+}
+
+/**
+ * Readiness is measured overnight, so it describes the body you woke up in.
+ * By the evening you have spent some of it, and a session at 7pm lands on a
+ * more depleted body than the same session at 7am would have.
+ *
+ * Load already spent is the only honest proxy we have for that, so an evening
+ * session on a day of heavy accumulated load is advised one notch harder than
+ * the morning number alone would suggest.
+ */
+function adjustForTimeOfDay(readiness, context = {}) {
+  const hour = Number.isFinite(Number(context.hour)) ? Number(context.hour) : new Date().getHours();
+  const load = Number(context.loadSoFar);
+
+  const partOfDay = hour < 11 ? 'morning' : hour < 16 ? 'midday' : 'evening';
+
+  // Mornings need no adjustment — the overnight reading IS the morning state.
+  if (partOfDay === 'morning' || !Number.isFinite(load)) {
+    return { effective: readiness, adjustment: 0, partOfDay };
+  }
+
+  // Only load beyond a normal day's baseline counts against the session.
+  const spentBeyondNormal = Math.max(0, load - 50);
+  const weight = partOfDay === 'evening' ? 0.3 : 0.15;
+  const adjustment = -Math.round(spentBeyondNormal * weight);
+
+  return {
+    effective: Math.max(0, Math.min(100, readiness + adjustment)),
+    adjustment,
+    partOfDay,
+  };
 }
 
 /** How many days back from today have been below 40. */

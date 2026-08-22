@@ -1,4 +1,4 @@
-import { useMemo } from 'react';
+import { useEffect, useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import { CalendarCheck, AlertTriangle, Info, ChevronRight, CircleAlert } from 'lucide-react';
 import clsx from 'clsx';
@@ -15,23 +15,50 @@ const FLAG_TONE = {
   info: { icon: Info, color: '#38bdf8' },
 };
 
+const PART_OF_DAY_LABEL = {
+  morning: 'This morning',
+  midday: 'Today',
+  evening: 'This evening',
+};
+
+/** Re-render as the clock moves, so advice opened at 7am is not still showing at 7pm. */
+function useNow() {
+  const [now, setNow] = useState(() => new Date());
+  useEffect(() => {
+    const tick = () => setNow(new Date());
+    const id = setInterval(tick, 60_000);
+    document.addEventListener('visibilitychange', tick);
+    return () => {
+      clearInterval(id);
+      document.removeEventListener('visibilitychange', tick);
+    };
+  }, []);
+  return now;
+}
+
 /**
- * The one card that answers "what should I do this morning".
+ * The one card that answers "what should I do before this session".
  *
  * Everything else on the dashboard reports; this decides. It reads the plan for
  * today, takes the readiness already computed, and produces instructions for
  * the session actually scheduled — which is why gym and cricket give different
- * advice from the same score.
+ * advice from the same score, and why opening it at 7pm does not give the same
+ * answer as opening it at 7am.
  */
 export default function TodaySession({ computed, health, sleep }) {
   const plan = useDataStore((s) => s.plan);
   const scores = useDataStore((s) => s.scores);
+  const now = useNow();
 
-  const session = useMemo(() => sessionFor(plan ?? [], new Date()), [plan]);
+  const session = useMemo(() => sessionFor(plan ?? [], now), [plan, now]);
 
   const guidance = useMemo(() => {
     const baselineRhr = computed?.breakdown?.baselines?.restingHr;
     return guidanceFor(computed?.readiness_score, session?.activity ?? 'gym', {
+      hour: now.getHours(),
+      // Readiness describes the body you woke up in. Exertion is how much of it
+      // you have already spent, which is what makes a 7pm session different.
+      loadSoFar: computed?.exertion_score,
       sleepHours: sleep?.duration_hours,
       restingHrDelta:
         Number.isFinite(Number(health?.resting_hr)) && Number.isFinite(Number(baselineRhr))
@@ -39,7 +66,7 @@ export default function TodaySession({ computed, health, sleep }) {
           : null,
       consecutiveLowDays: consecutiveLowDays(scores.filter((s) => s.date < todayKey())),
     });
-  }, [computed, session, sleep, health, scores]);
+  }, [computed, session, sleep, health, scores, now]);
 
   // Without a plan there is nothing to advise on; point at where to make one.
   if (!plan?.length) {
@@ -78,7 +105,7 @@ export default function TodaySession({ computed, health, sleep }) {
         </span>
         <div className="min-w-0 flex-1">
           <p className="text-sm font-semibold">
-            Today: {activity.label}
+            {PART_OF_DAY_LABEL[guidance.partOfDay] ?? 'Today'}: {activity.label}
             {session?.start_time ? (
               <span className="muted ml-1.5 text-xs font-normal">
                 {session.start_time.slice(0, 5)}

@@ -148,7 +148,12 @@ export function summariseBiomarkers(history = [], profile = null) {
   const sorted = [...history].sort((a, b) => (a.date < b.date ? 1 : -1)); // newest first
 
   return BIOMARKERS.map((marker) => {
+    // Number(null) is 0 and Number.isFinite(0) is true, so testing the coerced
+    // value lets every day WITHOUT a reading through as a zero. VO2 max is
+    // recorded every few weeks, so most days are null — the latest value read
+    // 0.0 and the average collapsed. Reject the raw value first.
     const readings = sorted
+      .filter((row) => row[marker.key] !== null && row[marker.key] !== undefined && row[marker.key] !== '')
       .map((row) => ({ date: row.date, value: Number(row[marker.key]) }))
       .filter((r) => Number.isFinite(r.value));
 
