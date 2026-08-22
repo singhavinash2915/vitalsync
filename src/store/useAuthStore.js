@@ -1,61 +1,46 @@
 import { create } from 'zustand';
-import { supabase, describeError, isSupabaseConfigured } from '../lib/supabase';
+import { supabase, describeError, isSupabaseConfigured, OWNER_ID } from '../lib/supabase';
 
 /**
- * Auth + user profile.
+ * The owner's profile.
  *
- * The `users` table row is created lazily on first sign-in (the DB trigger in
- * the migration handles it too, but doing it here keeps the app working even
- * if the trigger was never installed).
+ * There is no authentication. This app belongs to one person, runs on their own
+ * phone, and opens straight onto the dashboard — so rather than a session, there
+ * is a fixed owner id that every query pins itself to, and this store exists
+ * only to carry the profile row (age, weight, goal, calorie target) that the
+ * scoring needs.
+ *
+ * The name is kept because two dozen call sites read `user.id` and `profile`
+ * from it, and those mean exactly what they meant before.
  */
+const OWNER = { id: OWNER_ID };
+
 export const useAuthStore = create((set, get) => ({
-  session: null,
-  user: null,
+  user: OWNER,
   profile: null,
   initialising: true,
   error: null,
 
-  /** Wires up the auth listener. Called once from App on mount. */
+  /** Loads the profile. Called once from App on mount. */
   init: async () => {
     if (!isSupabaseConfigured) {
       set({ initialising: false });
       return () => {};
     }
-
     try {
-      const { data, error } = await supabase.auth.getSession();
-      if (error) throw error;
-      set({ session: data.session, user: data.session?.user ?? null });
-      if (data.session?.user) await get().loadProfile(data.session.user);
-    } catch (error) {
-      set({ error: describeError(error, 'Could not restore your session.') });
+      await get().loadProfile();
     } finally {
       set({ initialising: false });
     }
-
-    const {
-      data: { subscription },
-    } = supabase.auth.onAuthStateChange(async (_event, session) => {
-      set({ session, user: session?.user ?? null });
-      if (session?.user) {
-        await get().loadProfile(session.user);
-      } else {
-        set({ profile: null });
-      }
-    });
-
-    return () => subscription.unsubscribe();
+    return () => {};
   },
 
-  loadProfile: async (user) => {
-    const authUser = user ?? get().user;
-    if (!authUser) return null;
-
+  loadProfile: async () => {
     try {
       const { data, error } = await supabase
         .from('users')
         .select('*')
-        .eq('id', authUser.id)
+        .eq('id', OWNER_ID)
         .maybeSingle();
       if (error) throw error;
 
@@ -64,15 +49,10 @@ export const useAuthStore = create((set, get) => ({
         return data;
       }
 
-      // No row yet — create a stub so onboarding has something to update.
-      const stub = {
-        id: authUser.id,
-        email: authUser.email,
-        name: authUser.user_metadata?.name ?? '',
-      };
+      // No row yet — create a stub so the settings form has something to update.
       const { data: created, error: insertError } = await supabase
         .from('users')
-        .upsert(stub, { onConflict: 'id' })
+        .upsert({ id: OWNER_ID }, { onConflict: 'id' })
         .select()
         .single();
       if (insertError) throw insertError;
@@ -85,71 +65,16 @@ export const useAuthStore = create((set, get) => ({
     }
   },
 
-  signUp: async ({ email, password, name }) => {
-    set({ error: null });
-    const { data, error } = await supabase.auth.signUp({
-      email: email.trim(),
-      password,
-      options: { data: { name: name?.trim() ?? '' } },
-    });
-    if (error) return { ok: false, message: describeError(error) };
-
-    // Supabase returns a session immediately when email confirmation is off.
-    if (!data.session) {
-      return {
-        ok: true,
-        needsConfirmation: true,
-        message: 'Account created. Check your inbox to confirm your email, then sign in.',
-      };
-    }
-    return { ok: true };
-  },
-
-  signIn: async ({ email, password }) => {
-    set({ error: null });
-    const { error } = await supabase.auth.signInWithPassword({
-      email: email.trim(),
-      password,
-    });
-    if (error) return { ok: false, message: describeError(error) };
-    return { ok: true };
-  },
-
-  sendMagicLink: async (email) => {
-    const { error } = await supabase.auth.signInWithOtp({
-      email: email.trim(),
-      options: { emailRedirectTo: window.location.origin + import.meta.env.BASE_URL },
-    });
-    if (error) return { ok: false, message: describeError(error) };
-    return { ok: true, message: 'Magic link sent — check your email.' };
-  },
-
-  resetPassword: async (email) => {
-    const { error } = await supabase.auth.resetPasswordForEmail(email.trim(), {
-      redirectTo: window.location.origin + import.meta.env.BASE_URL,
-    });
-    if (error) return { ok: false, message: describeError(error) };
-    return { ok: true, message: 'Password reset link sent.' };
-  },
-
   updateProfile: async (patch) => {
-    const { user } = get();
-    if (!user) return { ok: false, message: 'Not signed in.' };
-
     const { data, error } = await supabase
       .from('users')
-      .upsert({ id: user.id, email: user.email, ...patch }, { onConflict: 'id' })
+      .upsert({ id: OWNER_ID, ...patch }, { onConflict: 'id' })
       .select()
       .single();
 
     if (error) return { ok: false, message: describeError(error) };
     set({ profile: data });
     return { ok: true, data };
-  },
-
-  signOut: async () => {
-    await supabase.auth.signOut();
-    set({ session: null, user: null, profile: null });
   },
 
   /** Onboarding is complete once we know age, weight and a goal. */

@@ -19,7 +19,7 @@ import { discoverFindings } from '../lib/discover';
 import { prescribeSession, coachContext } from '../lib/coach';
 import { ACTIVITIES } from '../lib/training';
 import { scoreColor } from '../lib/scores';
-import { supabase, functionsBaseUrl } from '../lib/supabase';
+import { anonKey, functionsBaseUrl } from '../lib/supabase';
 import { Card, CardBody, CardHeader, Button, TextArea, Badge, EmptyState } from '../components/ui';
 
 const NOTE_TONE = {
@@ -154,13 +154,15 @@ export default function Coach() {
     setChatError(null);
 
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const token = sessionData?.session?.access_token;
-      if (!token) throw new Error('Not signed in.');
-
+      // No sign-in, so the anon key is the credential. Supabase still checks
+      // it is a JWT this project issued before the function ever runs.
       const res = await fetch(`${functionsBaseUrl}/ai-coach`, {
         method: 'POST',
-        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        headers: {
+          'Content-Type': 'application/json',
+          Authorization: `Bearer ${anonKey}`,
+          apikey: anonKey,
+        },
         body: JSON.stringify({
           message: question,
           history: messages,

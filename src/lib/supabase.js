@@ -1,13 +1,16 @@
 import { createClient } from '@supabase/supabase-js';
 
 const url = import.meta.env.VITE_SUPABASE_URL;
-const anonKey = import.meta.env.VITE_SUPABASE_ANON_KEY;
+const anonKey_ = import.meta.env.VITE_SUPABASE_ANON_KEY;
+
+/** The public key every request goes out on. There is no other credential. */
+export const anonKey = anonKey_;
 
 /**
  * True when both env vars are present. The UI uses this to show a setup
  * screen instead of throwing an opaque network error on every query.
  */
-export const isSupabaseConfigured = Boolean(url && anonKey);
+export const isSupabaseConfigured = Boolean(url && anonKey_);
 
 if (!isSupabaseConfigured && import.meta.env.DEV) {
   console.warn(
@@ -18,16 +21,31 @@ if (!isSupabaseConfigured && import.meta.env.DEV) {
 
 export const supabase = createClient(
   url ?? 'https://placeholder.supabase.co',
-  anonKey ?? 'placeholder-anon-key',
+  anonKey_ ?? 'placeholder-anon-key',
   {
+    // There is no sign-in, so there is no session to keep, refresh, or read
+    // back out of a redirect URL. Every request goes out on the anon key.
     auth: {
-      persistSession: true,
-      autoRefreshToken: true,
-      detectSessionInUrl: true,
-      storageKey: 'vitalsync-auth',
+      persistSession: false,
+      autoRefreshToken: false,
+      detectSessionInUrl: false,
     },
   }
 );
+
+/**
+ * The single account this app reads and writes.
+ *
+ * VitalSync has no sign-in: it is one person's app, opened straight onto the
+ * dashboard, so there is no session to derive `auth.uid()` from and every query
+ * pins itself to this id instead. It is deliberately not a secret — the
+ * row-level security policies grant the anonymous role access to exactly these
+ * rows, so knowing the id is what makes the app work rather than what breaks it.
+ *
+ * Override with VITE_OWNER_ID if the data ever moves to another account.
+ */
+export const OWNER_ID =
+  import.meta.env.VITE_OWNER_ID ?? 'eb9b4bea-c04f-4906-a5fe-0acc54ffbb46';
 
 /** Base URL for Edge Functions, e.g. `.../functions/v1/health-sync`. */
 export const functionsBaseUrl = url ? `${url}/functions/v1` : '';
@@ -53,7 +71,7 @@ export function describeError(error, fallback = 'Something went wrong.') {
     return 'An entry for that date already exists — it has been updated instead.';
   }
   if (error.code === '42501' || /row-level security/i.test(message)) {
-    return 'Permission denied by row-level security. Make sure you are signed in.';
+    return 'Blocked by row-level security. Apply supabase/migrations/0009_public_access.sql, which grants the anonymous role access to this account.';
   }
   if (error.code === '42P01' || /relation .* does not exist/i.test(message)) {
     return 'Database tables are missing. Run supabase/migrations/0001_init.sql in the SQL editor.';
@@ -72,12 +90,6 @@ export function describeError(error, fallback = 'Something went wrong.') {
   }
   if (error.code === '23514' || /violates check constraint/i.test(message)) {
     return 'One of those values is outside the allowed range and was rejected by the database.';
-  }
-  if (/Invalid login credentials/i.test(message)) {
-    return 'Incorrect email or password.';
-  }
-  if (/Email not confirmed/i.test(message)) {
-    return 'Check your inbox and confirm your email address before signing in.';
   }
   return message || fallback;
 }

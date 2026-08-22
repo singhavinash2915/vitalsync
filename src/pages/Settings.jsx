@@ -5,7 +5,7 @@ import {
   Copy,
   Check,
   Download,
-  LogOut,
+  Globe,
   RefreshCw,
   Sun,
   Moon,
@@ -20,7 +20,7 @@ import {
 
 import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
-import { functionsBaseUrl, supabase, describeError } from '../lib/supabase';
+import { functionsBaseUrl, supabase, describeError, anonKey } from '../lib/supabase';
 import { useTheme } from '../context/ThemeContext';
 import { DEFAULT_CALORIE_TARGET, suggestCalorieTarget } from '../lib/scores';
 import { todayKey, relativeDay } from '../lib/dates';
@@ -96,7 +96,7 @@ function CopyRow({ label, value, secret = false }) {
 }
 
 export default function Settings() {
-  const { profile, user, updateProfile, signOut } = useAuthStore();
+  const { profile, user, updateProfile } = useAuthStore();
   const { health, sleep, workouts, journal, scores, recomputeAll, saving, loadAll } = useDataStore();
   const { theme, setTheme } = useTheme();
 
@@ -111,7 +111,6 @@ export default function Settings() {
   });
   const [status, setStatus] = useState({ tone: null, message: '' });
   const [busy, setBusy] = useState(false);
-  const [token, setToken] = useState('');
   const [importOpen, setImportOpen] = useState(false);
   const [syncKeys, setSyncKeys] = useState([]);
   const [newKey, setNewKey] = useState('');
@@ -138,14 +137,11 @@ export default function Settings() {
     setKeyBusy(true);
     setStatus({ tone: null, message: '' });
     try {
-      const { data: sessionData } = await supabase.auth.getSession();
-      const accessToken = sessionData.session?.access_token;
-      if (!accessToken) throw new Error('Your session has expired — sign in again.');
-
       const response = await fetch(`${functionsBaseUrl}/health-sync?action=create-key`, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${accessToken}`,
+          Authorization: `Bearer ${anonKey}`,
+          apikey: anonKey,
           'Content-Type': 'application/json',
         },
         body: '{}',
@@ -228,11 +224,6 @@ export default function Settings() {
       // Nothing to clear, or the browser blocked it — reloading is still right.
     }
     window.location.reload(true);
-  };
-
-  const revealToken = async () => {
-    const { data } = await supabase.auth.getSession();
-    setToken(data.session?.access_token ?? '');
   };
 
   const exportJson = () => {
@@ -534,18 +525,13 @@ export default function Settings() {
           </div>
 
           <details className="text-[11px]">
-            <summary className="muted cursor-pointer">Use a session token instead</summary>
+            <summary className="muted cursor-pointer">Use the anon key instead</summary>
             <div className="mt-2">
-              {token ? (
-                <CopyRow label="Bearer token" value={token} secret />
-              ) : (
-                <Button size="sm" variant="ghost" onClick={revealToken}>
-                  Reveal session token
-                </Button>
-              )}
+              <CopyRow label="Anon key" value={anonKey} secret />
               <p className="muted mt-1.5">
-                Sent as <code>Authorization: Bearer &lt;token&gt;</code>. Expires within the hour —
-                fine for a one-off test, not for an automation.
+                Sent as <code>Authorization: Bearer &lt;key&gt;</code>. It never expires, but it is
+                also the key compiled into this page, so a sync key you can revoke on its own is
+                still the better choice for an automation.
               </p>
             </div>
           </details>
@@ -605,9 +591,17 @@ export default function Settings() {
         </CardBody>
       </Card>
 
-      <Button variant="danger" icon={LogOut} className="w-full" onClick={signOut}>
-        Sign out
-      </Button>
+      <Card>
+        <CardHeader title="Who can see this" subtitle="No sign-in, by design" icon={Globe} />
+        <CardBody>
+          <p className="muted text-xs leading-relaxed">
+            This app has no password. Anyone who opens its address sees your health history and can
+            change or delete it, and the same is true of anything they point at the database
+            directly. That is the trade for opening straight onto the dashboard. Keep an export
+            somewhere safe — deletion here has no undo.
+          </p>
+        </CardBody>
+      </Card>
 
       <div className="pb-4 text-center">
         <p className="muted text-[10px]">

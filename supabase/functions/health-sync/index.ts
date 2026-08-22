@@ -355,6 +355,13 @@ const sha256 = async (text: string) => {
   return [...new Uint8Array(digest)].map((b) => b.toString(16).padStart(2, '0')).join('');
 };
 
+/**
+ * The single account this instance serves. VitalSync has no sign-in, so there
+ * is no session to read an id from. Override with VITALSYNC_OWNER_ID.
+ */
+const OWNER_ID =
+  Deno.env.get('VITALSYNC_OWNER_ID') ?? 'eb9b4bea-c04f-4906-a5fe-0acc54ffbb46';
+
 Deno.serve(async (req: Request) => {
   if (req.method === 'OPTIONS') return new Response('ok', { headers: CORS_HEADERS });
   if (req.method !== 'POST') return json({ error: 'Method not allowed. Use POST.' }, 405);
@@ -414,23 +421,36 @@ Deno.serve(async (req: Request) => {
       )
       .then(() => {});
   } else if (authHeader.startsWith('Bearer ')) {
+    const bearer = authHeader.slice(7).trim();
     const client = createClient(supabaseUrl, anonKey, {
       global: { headers: { Authorization: authHeader } },
       auth: { persistSession: false, autoRefreshToken: false },
     });
-    const {
-      data: { user },
-      error,
-    } = await client.auth.getUser();
 
-    if (error || !user) return json({ error: 'Invalid or expired token.', detail: error?.message }, 401);
-    userId = user.id;
-    db = client;
+    if (bearer === anonKey) {
+      // The app has no sign-in, so there is no user token to send and
+      // `getUser()` would find nobody behind the anon key. Row-level security
+      // scopes the anon role to this one account anyway, so the anon key now
+      // identifies the owner as surely as a session used to.
+      userId = OWNER_ID;
+      db = client;
+    } else {
+      const {
+        data: { user },
+        error,
+      } = await client.auth.getUser();
+
+      if (error || !user) {
+        return json({ error: 'Invalid or expired token.', detail: error?.message }, 401);
+      }
+      userId = user.id;
+      db = client;
+    }
   } else {
     return json(
       {
         error: 'Missing credentials.',
-        hint: 'Send X-Sync-Key: <key> (recommended) or Authorization: Bearer <access_token>.',
+        hint: 'Send X-Sync-Key: <key> (recommended) or Authorization: Bearer <anon key>.',
       },
       401
     );

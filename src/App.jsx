@@ -1,5 +1,5 @@
 import { useEffect } from 'react';
-import { Routes, Route, Navigate, useLocation } from 'react-router-dom';
+import { Routes, Route, Navigate } from 'react-router-dom';
 import { Loader2 } from 'lucide-react';
 
 import Layout from './components/Layout';
@@ -7,7 +7,6 @@ import { useAuthStore } from './store/useAuthStore';
 import { useDataStore } from './store/useDataStore';
 import { isSupabaseConfigured } from './lib/supabase';
 
-import Unlock from './pages/Unlock';
 import Onboarding from './pages/Onboarding';
 import Dashboard from './pages/Dashboard';
 import LogHealth from './pages/LogHealth';
@@ -34,22 +33,16 @@ function FullScreenLoader({ message = 'Loading VitalSync…' }) {
 }
 
 /**
- * Gate for every screen.
+ * Wrapper for every screen.
  *
- * There is no sign-up, no account switching and no onboarding wall — this is a
- * single-user app, so the only question is whether this device already holds a
- * session. It nearly always does, and the unlock screen is a once-per-device
- * event rather than something seen on launch.
+ * There is no sign-in and nothing to gate on — the app opens straight onto the
+ * dashboard. All this still does is hold the frame back until the profile has
+ * loaded, so the scoring is not run against a missing calorie target for a
+ * frame and then corrected.
  */
-function Protected({ children }) {
-  const { user, initialising } = useAuthStore();
-  const location = useLocation();
-
-  // Restoring a session is a local read plus a token refresh; showing the
-  // unlock screen during it would make a signed-in user think they had been
-  // signed out.
+function Shell({ children }) {
+  const initialising = useAuthStore((s) => s.initialising);
   if (initialising) return <FullScreenLoader message="Opening VitalSync…" />;
-  if (!user) return <Navigate to="/unlock" replace state={{ from: location }} />;
   return <Layout>{children}</Layout>;
 }
 
@@ -107,33 +100,24 @@ export default function App() {
 
   return (
     <Routes>
-      <Route path="/unlock" element={user ? <Navigate to="/" replace /> : <Unlock />} />
       {/* Reachable from Settings, never forced. Height, weight and goal sharpen
           the calorie target; nothing breaks while they are unset. */}
       <Route
         path="/welcome"
-        element={
-          !user ? (
-            <Navigate to="/unlock" replace />
-          ) : !profile ? (
-            <FullScreenLoader message="Loading your profile…" />
-          ) : (
-            <Onboarding />
-          )
-        }
+        element={!profile ? <FullScreenLoader message="Loading your profile…" /> : <Onboarding />}
       />
 
-      <Route path="/" element={<Protected><Dashboard /></Protected>} />
-      <Route path="/log" element={<Protected><LogHealth /></Protected>} />
-      <Route path="/workouts" element={<Protected><Workouts /></Protected>} />
-      <Route path="/sleep" element={<Protected><Sleep /></Protected>} />
-      <Route path="/journal" element={<Protected><Journal /></Protected>} />
-      <Route path="/trends" element={<Protected><Trends /></Protected>} />
-      <Route path="/biology" element={<Protected><Biomarkers /></Protected>} />
-      <Route path="/coach" element={<Protected><Coach /></Protected>} />
-      <Route path="/insights" element={<Protected><Insights /></Protected>} />
-      <Route path="/plan" element={<Protected><Plan /></Protected>} />
-      <Route path="/settings" element={<Protected><Settings /></Protected>} />
+      <Route path="/" element={<Shell><Dashboard /></Shell>} />
+      <Route path="/log" element={<Shell><LogHealth /></Shell>} />
+      <Route path="/workouts" element={<Shell><Workouts /></Shell>} />
+      <Route path="/sleep" element={<Shell><Sleep /></Shell>} />
+      <Route path="/journal" element={<Shell><Journal /></Shell>} />
+      <Route path="/trends" element={<Shell><Trends /></Shell>} />
+      <Route path="/biology" element={<Shell><Biomarkers /></Shell>} />
+      <Route path="/coach" element={<Shell><Coach /></Shell>} />
+      <Route path="/insights" element={<Shell><Insights /></Shell>} />
+      <Route path="/plan" element={<Shell><Plan /></Shell>} />
+      <Route path="/settings" element={<Shell><Settings /></Shell>} />
 
       <Route path="*" element={<Navigate to="/" replace />} />
     </Routes>
