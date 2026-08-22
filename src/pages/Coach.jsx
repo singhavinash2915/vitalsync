@@ -15,7 +15,7 @@ import clsx from 'clsx';
 
 import { useDataStore } from '../store/useDataStore';
 import { useAuthStore } from '../store/useAuthStore';
-import { discoverFindings } from '../lib/discover';
+import { useFindings } from '../lib/useFindings';
 import { prescribeSession, coachContext } from '../lib/coach';
 import { ACTIVITIES } from '../lib/training';
 import { scoreColor } from '../lib/scores';
@@ -122,7 +122,7 @@ export default function Coach() {
   const [chatError, setChatError] = useState(null);
   const endRef = useRef(null);
 
-  const findings = useMemo(() => discoverFindings({ health, sleep }), [health, sleep]);
+  const { findings, days } = useFindings();
 
   const ordered = useMemo(() => [...scores].sort((a, b) => (a.date < b.date ? -1 : 1)), [scores]);
   const readiness = ordered.at(-1)?.readiness_score ?? null;
@@ -294,7 +294,7 @@ export default function Coach() {
                 {findings.length} things your own history says
               </p>
               <p className="muted text-xs">
-                Mined from {health.length.toLocaleString()} days of readings, not from a textbook.
+                Mined from {days.toLocaleString()} days of readings, not from a textbook.
               </p>
             </div>
             <ChevronRight size={18} className="muted shrink-0" />

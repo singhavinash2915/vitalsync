@@ -435,7 +435,7 @@ export default function Dashboard() {
       ) : null}
 
       <InsightsList insights={insights} />
-      <DiscoveredFindingsCard health={health} sleep={sleepLogs} />
+      <DiscoveredFindingsCard />
       <WeeklySummaryCard summary={summary} />
       <PersonalRecordsCard records={records} />
 

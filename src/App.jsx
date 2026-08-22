@@ -49,6 +49,7 @@ function Shell({ children }) {
 export default function App() {
   const { init, user, profile } = useAuthStore();
   const loadAll = useDataStore((s) => s.loadAll);
+  const loadFullHistory = useDataStore((s) => s.loadFullHistory);
   const reset = useDataStore((s) => s.reset);
 
   useEffect(() => {
@@ -62,11 +63,13 @@ export default function App() {
   // Load (and clear) health data as the signed-in user changes.
   useEffect(() => {
     if (user?.id) {
-      loadAll(user.id);
+      // The windowed load paints the dashboard; the full history trails it in
+      // the background for the findings, which nothing above the fold needs.
+      loadAll(user.id).then(() => loadFullHistory(user.id));
     } else {
       reset();
     }
-  }, [user?.id, loadAll, reset]);
+  }, [user?.id, loadAll, loadFullHistory, reset]);
 
   // Once the data and profile are both present, bring stored scores up to date
   // with the current formula. No-ops unless the algorithm actually changed.

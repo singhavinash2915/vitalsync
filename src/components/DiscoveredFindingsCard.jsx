@@ -1,8 +1,7 @@
-import { useMemo } from 'react';
 import { Link } from 'react-router-dom';
 import { Telescope, ChevronRight } from 'lucide-react';
 
-import { discoverFindings } from '../lib/discover';
+import { useFindings } from '../lib/useFindings';
 import { Card, CardBody } from './ui';
 
 /**
@@ -12,8 +11,8 @@ import { Card, CardBody } from './ui';
  * years behind it, so it leads with the single finding most likely to change
  * what he does rather than repeating the morning's numbers back at him.
  */
-export default function DiscoveredFindingsCard({ health = [], sleep = [] }) {
-  const findings = useMemo(() => discoverFindings({ health, sleep }), [health, sleep]);
+export default function DiscoveredFindingsCard() {
+  const { findings, days } = useFindings();
   if (findings.length < 2) return null;
 
   // The first is always today's status, which the dashboard has already said.
@@ -30,7 +29,7 @@ export default function DiscoveredFindingsCard({ health = [], sleep = [] }) {
             <p className="text-xs font-semibold">{lead.title}</p>
             <p className="muted mt-0.5 text-[11px] leading-relaxed">{lead.headline}</p>
             <p className="mt-1.5 text-[10px] font-medium text-accent">
-              {findings.length} findings from {health.length.toLocaleString()} days of your own data
+              {findings.length} findings from {days.toLocaleString()} days of your own data
             </p>
           </div>
           <ChevronRight size={16} className="muted mt-1 shrink-0" />

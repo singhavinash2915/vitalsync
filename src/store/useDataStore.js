@@ -15,6 +15,14 @@ import { subDays } from 'date-fns';
 
 const WINDOW_DAYS = 120;
 
+/**
+ * PostgREST caps a single response at 1,000 rows regardless of `.limit()`, so
+ * the full history has to be paged. Four pages covers eleven years of daily
+ * readings, which is well past anything the findings need.
+ */
+const HISTORY_PAGE = 1000;
+const HISTORY_MAX_PAGES = 4;
+
 /** Written on every imported sleep row so the key sets stay uniform. */
 const SLEEP_COLUMNS = [
   'duration_hours',
@@ -95,6 +103,19 @@ export const useDataStore = create((set, get) => ({
   snapshots: [],
   biomarkers: [],
   plan: [],
+  /**
+   * Every day ever recorded, but only the four columns the findings read.
+   *
+   * `health` is deliberately windowed to 120 days: the dashboard needs all of
+   * its columns and none of its depth. The discovery engine is the opposite —
+   * it compares years against each other and splits days into groups that have
+   * to be big enough to mean anything, and on a 120-day window the samples
+   * collapse and the year-over-year comparison cannot run at all. So it gets
+   * its own lean, unwindowed slice, fetched after the first paint.
+   */
+  fullHistory: [],
+  fullSleepHistory: [],
+  fullHistoryLoading: false,
 
   loading: true,
   saving: false,
@@ -111,10 +132,64 @@ export const useDataStore = create((set, get) => ({
       snapshots: [],
       biomarkers: [],
       plan: [],
+      fullHistory: [],
+      fullSleepHistory: [],
+      fullHistoryLoading: false,
       loading: true,
       error: null,
       lastSyncedAt: null,
     }),
+
+  /**
+   * Full history for the discovery engine, in the background.
+   *
+   * Named `fullHistory` rather than `history` because this store already
+   * passes a `history` argument to the scoring functions meaning something
+   * narrower — the windowed rows before a given date.
+   *
+   * Kept out of `loadAll` on purpose: it is several round trips and nothing
+   * above the fold waits on it, so blocking the dashboard for it would trade a
+   * slower launch every day for a screen consulted occasionally.
+   */
+  loadFullHistory: async (userId) => {
+    if (!userId || get().fullHistoryLoading) return;
+    set({ fullHistoryLoading: true });
+
+    try {
+      const rows = [];
+      for (let page = 0; page < HISTORY_MAX_PAGES; page += 1) {
+        const from = page * HISTORY_PAGE;
+        const { data, error } = await supabase
+          .from('health_logs')
+          .select('date, hrv, resting_hr, steps, active_calories')
+          .eq('user_id', userId)
+          .order('date', { ascending: false })
+          .range(from, from + HISTORY_PAGE - 1);
+
+        if (error) throw error;
+        rows.push(...(data ?? []));
+        if (!data || data.length < HISTORY_PAGE) break; // last page
+      }
+
+      // Sleep needs the same treatment for the same reason, and costs almost
+      // nothing: nights are logged in the dozens, not the thousands, and the
+      // window was hiding more than half of them from the comparison.
+      const { data: nights } = await supabase
+        .from('sleep_logs')
+        .select('date, duration_hours, deep_hours, rem_hours, awake_hours')
+        .eq('user_id', userId)
+        .order('date', { ascending: false })
+        .limit(HISTORY_PAGE);
+
+      set({ fullHistory: rows, fullSleepHistory: nights ?? [] });
+    } catch (error) {
+      // The findings are an extra. A failure here must not surface as a
+      // dashboard error, and the screens fall back to the windowed slice.
+      console.warn('[VitalSync] Could not load full history for findings.', error);
+    } finally {
+      set({ fullHistoryLoading: false });
+    }
+  },
 
   /** Loads every table for the rolling window in one parallel batch. */
   loadAll: async (userId, { silent = false } = {}) => {

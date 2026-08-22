@@ -1,9 +1,7 @@
-import { useMemo } from 'react';
 import { Sparkles, TrendingUp, TrendingDown, Minus } from 'lucide-react';
 import clsx from 'clsx';
 
-import { useDataStore } from '../store/useDataStore';
-import { discoverFindings } from '../lib/discover';
+import { useFindings } from '../lib/useFindings';
 import { Card, CardBody, EmptyState } from '../components/ui';
 
 const TONE = {
@@ -91,8 +89,7 @@ function MiniTable({ rows }) {
 }
 
 export default function Insights() {
-  const { health, sleep } = useDataStore();
-  const findings = useMemo(() => discoverFindings({ health, sleep }), [health, sleep]);
+  const { findings, days, refining } = useFindings();
 
   if (!findings.length) {
     return (
@@ -112,9 +109,10 @@ export default function Insights() {
   return (
     <div className="space-y-5">
       <p className="muted text-xs leading-relaxed">
-        Everything below was measured from your own {health.length.toLocaleString()} days of
-        readings. Where it disagrees with general advice, it is describing you and the advice is
-        describing an average — but check the sample size before you act on anything.
+        Everything below was measured from your own {days.toLocaleString()} days of readings
+        {refining ? ' (still loading the rest)' : ''}. Where it disagrees with general advice, it is
+        describing you and the advice is describing an average — but check the sample size before
+        you act on anything.
       </p>
 
       {Object.entries(grouped).map(([category, items], gi) => (
