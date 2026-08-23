@@ -1,6 +1,7 @@
 import { bandFor } from './scores';
 import { shiftKey, todayKey } from './dates';
 import { sessionFor, ageFrom } from './training';
+import { detectIllnessSignal } from './illness';
 
 /**
  * The trainer. Where `training.js` says how hard to go, this says what to do.
@@ -151,9 +152,23 @@ const CRICKET_OVERS = {
 };
 
 /** Turns a 0–100 score into the band the prescription keys off. */
-export function bandKey(readiness) {
-  if (!Number.isFinite(Number(readiness))) return 'moderate';
-  return Number(readiness) < 25 ? 'critical' : bandFor(readiness).key;
+export function bandKey(readiness, illness = null) {
+  const scored = !Number.isFinite(Number(readiness))
+    ? 'moderate'
+    : Number(readiness) < 25
+      ? 'critical'
+      : bandFor(readiness).key;
+
+  // Matches the dashboard card: a likely infection is a rest day outright, and
+  // a milder signal costs one band. The written session and the morning
+  // guidance must not disagree about whether to train.
+  if (illness?.level === 'likely') return 'critical';
+  if (illness) {
+    const order = ['excellent', 'good', 'moderate', 'poor', 'critical'];
+    const i = order.indexOf(scored);
+    return i < 0 ? scored : order[Math.min(i + 1, order.length - 1)];
+  }
+  return scored;
 }
 
 /**
@@ -187,11 +202,12 @@ export function prescribeSession({
   plan = [],
   findings = [],
   profile = null,
+  illness = null,
   date = todayKey(),
 } = {}) {
   const session = sessionFor(plan, new Date(`${date}T12:00:00`));
   const activity = session?.activity ?? 'rest';
-  const band = bandKey(readiness);
+  const band = bandKey(readiness, illness);
   const scale = SCALING[band];
   const ahead = lookAhead(plan, date);
   const notes = [];
@@ -205,6 +221,16 @@ export function prescribeSession({
     recent.length >= 2 &&
     Number(readiness) < 40 &&
     recent.slice(0, -1).some((v) => Number(v) >= 50);
+
+  if (illness) {
+    notes.push({
+      tone: illness.level === 'likely' ? 'bad' : 'warn',
+      text:
+        illness.level === 'likely'
+          ? `Breathing rate up ${illness.respiratoryDelta}% for ${illness.days} nights${illness.corroborated ? ', with resting heart rate up too' : ''}. This is a rest day regardless of the score.`
+          : `Breathing rate up ${illness.respiratoryDelta}% for ${illness.days} nights — one notch easier than planned, and look again tomorrow.`,
+    });
+  }
 
   if (isolatedDip && noisy) {
     notes.push({
@@ -338,8 +364,22 @@ export function coachContext({ health = [], sleep = [], scores = [], findings = 
     profile,
   });
 
+  const illness = detectIllnessSignal(health);
+
   return {
     today: todayKey(),
+    // Present only when it fires, so its absence is not mistaken for a clean
+    // bill of health the data cannot actually give.
+    ...(illness
+      ? {
+          illnessSignal: {
+            level: illness.level,
+            respiratoryDeltaPct: illness.respiratoryDelta,
+            restingHrDeltaPct: illness.restingHrDelta,
+            nights: illness.days,
+          },
+        }
+      : {}),
     age: profile ? ageFrom(profile) : null,
     // Describes whoever is signed in, not whoever built the app — a second
     // account must not be coached as a cricketer because the owner is one.

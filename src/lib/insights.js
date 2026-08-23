@@ -1,5 +1,6 @@
 import { mean, bandFor, toNumber, hasNumber, BASELINE_DAYS, MIN_BASELINE_DAYS } from './scores';
 import { formatHours, relativeDay } from './dates';
+import { detectIllnessSignal } from './illness';
 
 /**
  * Turns raw numbers into the one sentence that actually changes behaviour.
@@ -12,6 +13,20 @@ const pct = (a, b) => (b ? ((a - b) / b) * 100 : 0);
 
 export function buildInsights({ today, history = [], sleepToday, sleepHistory = [], workouts = [] }) {
   const insights = [];
+
+  // Outranks everything else on the screen. A developing infection makes the
+  // rest of the advice actively wrong — "your HRV is low, train easy" is the
+  // wrong sentence when the answer is "do not train, and drink something".
+  const illness = detectIllnessSignal([...history, today].filter(Boolean));
+  if (illness) {
+    insights.push({
+      priority: -1,
+      tone: illness.level === 'likely' ? 'bad' : 'warn',
+      icon: 'thermometer',
+      title: illness.headline,
+      body: illness.detail,
+    });
+  }
 
   // Must match the window the scores themselves use. These sentences quote the
   // baseline back at you, so a 7-day figure here beside a 60-day score on the

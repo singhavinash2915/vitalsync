@@ -17,6 +17,7 @@ import { useDataStore } from '../store/useDataStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { useFindings } from '../lib/useFindings';
 import { prescribeSession, coachContext } from '../lib/coach';
+import { detectIllnessSignal } from '../lib/illness';
 import { ACTIVITIES } from '../lib/training';
 import { scoreColor } from '../lib/scores';
 import { anonKey, functionsBaseUrl } from '../lib/supabase';
@@ -127,6 +128,8 @@ export default function Coach() {
   const ordered = useMemo(() => [...scores].sort((a, b) => (a.date < b.date ? -1 : 1)), [scores]);
   const readiness = ordered.at(-1)?.readiness_score ?? null;
 
+  const illness = useMemo(() => detectIllnessSignal(health), [health]);
+
   const session = useMemo(
     () =>
       prescribeSession({
@@ -135,8 +138,9 @@ export default function Coach() {
         plan,
         findings,
         profile,
+        illness,
       }),
-    [readiness, ordered, plan, findings, profile]
+    [readiness, ordered, plan, findings, profile, illness]
   );
 
   useEffect(() => {

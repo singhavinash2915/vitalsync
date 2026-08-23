@@ -241,9 +241,35 @@ export function guidanceFor(readiness, activity = 'gym', context = {}) {
   const CRITICAL_BELOW = 25;
 
   const { effective, adjustment, partOfDay } = adjustForTimeOfDay(readiness, context);
-  const band = effective < CRITICAL_BELOW ? 'critical' : bandFor(effective).key;
+
+  // A developing infection overrides the score outright. Readiness can look
+  // ordinary on the first day of one, and training into it is how a week off
+  // becomes three.
+  const illness = context.illness ?? null;
+
+  // Override the band rather than merely annotating it. A flag saying "rest
+  // whatever the number says" under a heading saying "cut the volume, keep the
+  // weight" asks the reader to decide which half to believe, and the whole
+  // point of this card is that it decides.
+  const scored = effective < CRITICAL_BELOW ? 'critical' : bandFor(effective).key;
+  const band =
+    illness?.level === 'likely'
+      ? 'critical'
+      : illness
+        ? stepDown(scored)
+        : scored;
   const base = LIBRARY[key][band] ?? LIBRARY[key].poor;
   const flags = [];
+
+  if (illness) {
+    flags.push({
+      tone: illness.level === 'likely' ? 'bad' : 'warn',
+      text:
+        illness.level === 'likely'
+          ? `Your breathing rate has been up ${illness.respiratoryDelta}% for ${illness.days} nights${illness.corroborated ? ' with resting heart rate up too' : ''}. Rest today whatever the number says.`
+          : `Breathing rate up ${illness.respiratoryDelta}% for ${illness.days} nights — mild, but keep today easy and check again tomorrow.`,
+    });
+  }
 
   if (adjustment < -2) {
     flags.push({
@@ -290,6 +316,13 @@ export function guidanceFor(readiness, activity = 'gym', context = {}) {
  * session on a day of heavy accumulated load is advised one notch harder than
  * the morning number alone would suggest.
  */
+/** One band more cautious; 'critical' is already the floor. */
+function stepDown(band) {
+  const order = ['excellent', 'good', 'moderate', 'poor', 'critical'];
+  const i = order.indexOf(band);
+  return i < 0 ? band : order[Math.min(i + 1, order.length - 1)];
+}
+
 function adjustForTimeOfDay(readiness, context = {}) {
   const hour = Number.isFinite(Number(context.hour)) ? Number(context.hour) : new Date().getHours();
   const load = Number(context.loadSoFar);

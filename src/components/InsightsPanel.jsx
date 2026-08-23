@@ -8,6 +8,7 @@ import {
   Sparkles,
   Trophy,
   Minus,
+  Thermometer,
 } from 'lucide-react';
 import clsx from 'clsx';
 import { Card, CardHeader, CardBody } from './ui';
@@ -22,6 +23,7 @@ const ICONS = {
   moon: Moon,
   dumbbell: Dumbbell,
   sparkles: Sparkles,
+  thermometer: Thermometer,
 };
 
 const TONES = {

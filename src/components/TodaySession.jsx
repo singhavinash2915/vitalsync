@@ -5,6 +5,7 @@ import clsx from 'clsx';
 
 import { useDataStore } from '../store/useDataStore';
 import { ACTIVITIES, sessionFor, guidanceFor, consecutiveLowDays } from '../lib/training';
+import { detectIllnessSignal } from '../lib/illness';
 import { scoreColor, toNumber } from '../lib/scores';
 import { todayKey } from '../lib/dates';
 import { Card, CardBody, Badge } from './ui';
@@ -48,6 +49,7 @@ function useNow() {
 export default function TodaySession({ computed, health, sleep }) {
   const plan = useDataStore((s) => s.plan);
   const scores = useDataStore((s) => s.scores);
+  const allHealth = useDataStore((s) => s.health);
   const now = useNow();
 
   const session = useMemo(() => sessionFor(plan ?? [], now), [plan, now]);
@@ -67,8 +69,9 @@ export default function TodaySession({ computed, health, sleep }) {
           ? toNumber(health.resting_hr) - toNumber(baselineRhr)
           : null,
       consecutiveLowDays: consecutiveLowDays(scores.filter((s) => s.date < todayKey())),
+      illness: detectIllnessSignal(allHealth),
     });
-  }, [computed, session, sleep, health, scores, now]);
+  }, [computed, session, sleep, health, scores, now, allHealth]);
 
   // Without a plan there is nothing to advise on; point at where to make one.
   if (!plan?.length) {
