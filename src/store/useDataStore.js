@@ -751,7 +751,18 @@ export const useDataStore = create((set, get) => ({
         exertion_score: computed.exertion_score,
         readiness_score: computed.readiness_score,
       };
-    });
+    })
+      // A day whose every component came out null carries no information — it
+      // says "there was a row in health_logs", which health_logs already says.
+      // Widening the rebuild to the whole record briefly wrote a thousand of
+      // these, one for every step-count-only day back to 2019.
+      .filter(
+        (row) =>
+          row.recovery_score !== null ||
+          row.sleep_score !== null ||
+          row.exertion_score !== null ||
+          row.readiness_score !== null
+      );
 
     if (!rows.length) {
       set({ saving: false });

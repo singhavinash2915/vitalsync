@@ -1,21 +1,22 @@
 import { useState, useEffect, useCallback } from 'react';
 import {
-  User,
-  Watch,
-  Copy,
+  AlertTriangle,
   Check,
+  Copy,
   Download,
-  Globe,
-  RefreshCw,
-  Sun,
-  Moon,
   Eye,
   EyeOff,
+  Globe,
+  KeyRound,
+  Moon,
+  RefreshCw,
   Save,
   Smartphone,
-  Upload,
-  KeyRound,
+  Sun,
   Trash2,
+  Upload,
+  User,
+  Watch,
 } from 'lucide-react';
 
 import { Link } from 'react-router-dom';
@@ -23,7 +24,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
 import { functionsBaseUrl, supabase, describeError, anonKey } from '../lib/supabase';
 import { useTheme } from '../context/ThemeContext';
-import { DEFAULT_CALORIE_TARGET, suggestCalorieTarget } from '../lib/scores';
+import { DEFAULT_CALORIE_TARGET, suggestCalorieTarget, SCORING_VERSION } from '../lib/scores';
 import { todayKey, relativeDay } from '../lib/dates';
 import {
   Card,
@@ -93,6 +94,54 @@ function CopyRow({ label, value, secret = false }) {
           {copied ? <Check size={14} className="text-score-excellent" /> : <Copy size={14} />}
         </button>
       </div>
+    </div>
+  );
+}
+
+/**
+ * Whether the stored scores are actually current.
+ *
+ * Rebuilds happen quietly, on a version bump, in the background, and until now
+ * there was no way to tell whether one had run — which made "check the scores
+ * rebuilt" a question only the database could answer. This says it on the
+ * screen: the formula the code is on, the formula your saved history was built
+ * with, and when it last changed.
+ */
+function ScoringStatus() {
+  const profile = useAuthStore((s) => s.profile);
+  const scores = useDataStore((s) => s.scores);
+  const canEdit = useCanEdit();
+
+  const stored = profile?.scoring_version ?? null;
+  const current = stored === SCORING_VERSION;
+  const lastWrite = scores.reduce(
+    (latest, r) => (r.updated_at && (!latest || r.updated_at > latest) ? r.updated_at : latest),
+    null
+  );
+
+  return (
+    <div
+      className="rounded-xl border px-3 py-2.5 text-[11px] leading-relaxed"
+      style={{ borderColor: 'var(--border)' }}
+    >
+      <div className="flex items-center justify-between gap-2">
+        <span className="font-semibold">Scoring formula</span>
+        <span
+          className="flex items-center gap-1 font-semibold"
+          style={{ color: current ? '#22c55e' : '#f97316' }}
+        >
+          {current ? <Check size={12} aria-hidden="true" /> : <AlertTriangle size={12} aria-hidden="true" />}
+          v{stored ?? '—'} {current ? 'up to date' : `— code is on v${SCORING_VERSION}`}
+        </span>
+      </div>
+      <p className="muted mt-1">
+        {current
+          ? 'Your saved history was rebuilt with the formula this build uses.'
+          : canEdit
+            ? 'Your saved scores were built with an older formula. Open the dashboard and it will rebuild itself, or use the button below.'
+            : 'Sign in to rebuild — a signed-out session cannot write.'}
+        {lastWrite ? ` Last written ${relativeDay(lastWrite.slice(0, 10))}.` : ''}
+      </p>
     </div>
   );
 }
@@ -585,6 +634,7 @@ export default function Settings() {
               Export CSV
             </Button>
           </div>
+          <ScoringStatus />
           <Button variant="secondary" icon={RefreshCw} className="w-full" onClick={rebuild} loading={saving}>
             Rebuild all scores
           </Button>
