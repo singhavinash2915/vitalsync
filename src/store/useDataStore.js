@@ -169,25 +169,30 @@ export const useDataStore = create((set, get) => ({
    * above the fold waits on it, so blocking the dashboard for it would trade a
    * slower launch every day for a screen consulted occasionally.
    */
+  /** Pages `health_logs` past the 1,000-row cap. Columns the scoring needs only. */
+  fetchAllHealth: async (userId) => {
+    const rows = [];
+    for (let page = 0; page < HISTORY_MAX_PAGES; page += 1) {
+      const from = page * HISTORY_PAGE;
+      const { data, error } = await supabase
+        .from('health_logs')
+        .select('date, hrv, resting_hr, steps, active_calories')
+        .eq('user_id', userId)
+        .order('date', { ascending: false })
+        .range(from, from + HISTORY_PAGE - 1);
+      if (error) throw error;
+      rows.push(...(data ?? []));
+      if (!data || data.length < HISTORY_PAGE) break;
+    }
+    return rows;
+  },
+
   loadFullHistory: async (userId) => {
     if (!userId || get().fullHistoryLoading) return;
     set({ fullHistoryLoading: true });
 
     try {
-      const rows = [];
-      for (let page = 0; page < HISTORY_MAX_PAGES; page += 1) {
-        const from = page * HISTORY_PAGE;
-        const { data, error } = await supabase
-          .from('health_logs')
-          .select('date, hrv, resting_hr, steps, active_calories')
-          .eq('user_id', userId)
-          .order('date', { ascending: false })
-          .range(from, from + HISTORY_PAGE - 1);
-
-        if (error) throw error;
-        rows.push(...(data ?? []));
-        if (!data || data.length < HISTORY_PAGE) break; // last page
-      }
+      const rows = await get().fetchAllHealth(userId);
 
       // Sleep needs the same treatment for the same reason, and costs almost
       // nothing: nights are logged in the dozens, not the thousands, and the
@@ -676,24 +681,66 @@ export const useDataStore = create((set, get) => ({
   recomputeAll: async (userId, profile) => {
     if (!canEdit()) return READ_ONLY;
     set({ saving: true, error: null });
-    const s = get();
+
+    /*
+     * Deliberately does NOT work from the in-memory slices.
+     *
+     * Those hold a rolling 120-day window, so building the date list from them
+     * silently excluded every older day that already had a score — and then
+     * stamped the profile with the new scoring version, so the next rebuild
+     * skipped them too. Twenty-four days from April were left stranded on the
+     * formula from two versions ago, permanently.
+     *
+     * A rebuild is a rare, explicit operation, so it reads what it needs.
+     */
+    let allHealth = [];
+    let allSleep = [];
+    let allWorkouts = [];
+    let allJournal = [];
+    let scoredDates = [];
+    try {
+      const [health, sleep, workouts, journal, scores] = await Promise.all([
+        get().fetchAllHealth(userId),
+        supabase.from('sleep_logs').select('*').eq('user_id', userId).limit(HISTORY_PAGE),
+        supabase.from('workout_logs').select('*').eq('user_id', userId).limit(HISTORY_PAGE),
+        supabase.from('journal_logs').select('*').eq('user_id', userId).limit(HISTORY_PAGE),
+        supabase.from('scores').select('date').eq('user_id', userId).limit(HISTORY_PAGE * 4),
+      ]);
+      allHealth = health;
+      allSleep = sleep.data ?? [];
+      allWorkouts = workouts.data ?? [];
+      allJournal = journal.data ?? [];
+      scoredDates = (scores.data ?? []).map((r) => r.date);
+    } catch (error) {
+      const message = describeError(error, 'Could not read your history to rebuild scores.');
+      set({ saving: false, error: message });
+      return { ok: false, message };
+    }
+
+    // Every day that already carries a score, plus every day with data — so a
+    // rebuild can never leave a row behind on an older formula.
     const dates = [
       ...new Set([
-        ...s.health.map((r) => r.date),
-        ...s.sleep.map((r) => r.date),
-        ...s.workouts.map((r) => r.date),
-        ...s.journal.map((r) => r.date),
+        ...scoredDates,
+        ...allHealth.map((r) => r.date),
+        ...allSleep.map((r) => r.date),
+        ...allWorkouts.map((r) => r.date),
+        ...allJournal.map((r) => r.date),
       ]),
     ].sort();
 
+    const healthAsc = [...allHealth].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const sleepAsc = [...allSleep].sort((a, b) => (a.date < b.date ? -1 : 1));
+    const pick = (rows, date) => rows.find((r) => r.date === date) ?? null;
+
     const rows = dates.map((date) => {
       const computed = computeDailyScores({
-        health: s.healthFor(date),
-        sleep: s.sleepFor(date),
-        journal: s.journalFor(date),
-        workouts: s.workoutsFor(date),
-        history: s.historyBefore(date),
-        sleepHistory: s.sleepHistoryBefore(date),
+        health: pick(healthAsc, date),
+        sleep: pick(sleepAsc, date),
+        journal: pick(allJournal, date),
+        workouts: allWorkouts.filter((r) => r.date === date),
+        history: healthAsc.filter((r) => r.date < date).sort(byDateDesc),
+        sleepHistory: sleepAsc.filter((r) => r.date < date).sort(byDateDesc),
         profile,
       });
       return {
@@ -711,18 +758,22 @@ export const useDataStore = create((set, get) => ({
       return { ok: true, count: 0 };
     }
 
-    const { data, error } = await supabase
-      .from('scores')
-      .upsert(rows, { onConflict: 'user_id,date' })
-      .select();
-
-    if (error) {
-      const message = describeError(error, 'Could not rebuild your scores.');
-      set({ saving: false, error: message });
-      return { ok: false, message };
+    // Chunked: a rebuild now covers every scored day, which is well past what
+    // one request will carry.
+    const CHUNK = 500;
+    for (let i = 0; i < rows.length; i += CHUNK) {
+      const { error } = await supabase
+        .from('scores')
+        .upsert(rows.slice(i, i + CHUNK), { onConflict: 'user_id,date' });
+      if (error) {
+        const message = describeError(error, 'Could not rebuild your scores.');
+        set({ saving: false, error: message });
+        return { ok: false, message };
+      }
     }
 
-    set({ scores: (data ?? []).sort(byDateDesc), saving: false });
+    await get().loadAll(userId, { silent: true });
+    set({ saving: false });
     return { ok: true, count: rows.length };
   },
 

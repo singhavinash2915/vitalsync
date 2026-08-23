@@ -38,8 +38,13 @@ export const BASELINE_DAYS = 60;
  *    100% below baseline, i.e. perfect recovery), and recovery is weighted
  *    over the halves actually measured instead of blending against a
  *    placeholder 50.
+ * 4: no formula change. A rebuild used to take its dates from the in-memory
+ *    120-day window, stranding older scored days on whatever formula was
+ *    current when they were last written — and baselines for days near the
+ *    window edge were computed from a truncated history. Rebuilds now read the
+ *    whole record, so a day's score no longer depends on when it was computed.
  */
-export const SCORING_VERSION = 3;
+export const SCORING_VERSION = 4;
 
 /**
  * Below this, the baseline is too thin to trust and the sub-score falls back
