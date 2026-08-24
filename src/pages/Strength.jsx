@@ -18,7 +18,20 @@ function plannedLifts(session) {
   return session.blocks
     .filter((b) => ['Main', 'Support', 'Skill'].includes(b.name))
     .flatMap((b) => b.items)
-    .map((item) => item.replace(/\s+\d+×.*$/, '').trim())
+    // Strip the prescription off the movement name: "Box squat to parallel
+    // 4×5 @ RPE 7" is a set-and-rep scheme, but the button is a lift. Also
+    // drops the trailing punctuation a substituted phrase leaves behind
+    // ("Split squat to a pad, 3×10 each leg" -> "Split squat to a pad").
+    .map((item) => {
+      const trimmed = item
+        .replace(/[,–—-]?\s*\d+\s*×.*$/i, '')
+        .replace(/[,;:\s]+$/, '')
+        .trim();
+      // Some lines lead with the number ("6 × 90s bike interval"), where
+      // stripping leaves nothing. Keep the original rather than dropping a
+      // real prescription off the list.
+      return trimmed || item.trim();
+    })
     .filter(Boolean);
 }
 
