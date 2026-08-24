@@ -13,3 +13,8 @@ verify_jwt = false
 # request it accepts spends money at Anthropic. Let Supabase reject anything
 # without a valid access token before it reaches the function.
 verify_jwt = true
+
+[functions.nutrition-estimate]
+# Same reasoning as ai-coach: it spends money at Anthropic, so let Supabase
+# reject anything without a valid project token before it reaches the function.
+verify_jwt = true

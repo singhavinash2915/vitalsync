@@ -93,15 +93,27 @@ Deno.serve(async (req: Request) => {
     if (!res.ok) {
       const detail = await res.text();
       console.error('anthropic error', res.status, detail);
+
+      // Pass Anthropic's own sentence through. Reporting a bare status code
+      // sent someone hunting for a bug in this function when the real cause —
+      // "your credit balance is too low" — was sitting in the response body.
+      let upstream = '';
+      try {
+        upstream = JSON.parse(detail)?.error?.message ?? '';
+      } catch {
+        upstream = '';
+      }
+
       return json(
         {
           error: 'upstream',
           message:
-            res.status === 401
+            upstream ||
+            (res.status === 401
               ? 'The Anthropic API key was rejected. Check ANTHROPIC_API_KEY.'
               : res.status === 429
                 ? 'Rate limited by Anthropic — try again in a moment.'
-                : `Anthropic returned ${res.status}.`,
+                : `Anthropic returned ${res.status}.`),
         },
         502
       );

@@ -1,12 +1,26 @@
 import { useMemo, useState } from 'react';
-import { Dumbbell, Plus, Trash2, TrendingUp, TrendingDown, Minus, Trophy, Watch } from 'lucide-react';
+import {
+  Dumbbell, Plus, Trash2, TrendingUp, TrendingDown, Minus, Trophy, Watch,
+  AlertTriangle, BarChart3, Search,
+} from 'lucide-react';
 
 import { useDataStore } from '../store/useDataStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { prescribeSession } from '../lib/coach';
 import { detectIllnessSignal } from '../lib/illness';
 import { useFindings } from '../lib/useFindings';
-import { setsForDate, progressFor, exerciseList, estimateOneRepMax } from '../lib/strength';
+import {
+  setsForDate,
+  progressFor,
+  exerciseList,
+  estimateOneRepMax,
+  suggestNextLoad,
+  detectStall,
+  weeklyVolume,
+} from '../lib/strength';
+import { BODY_PARTS, exercisesForPart } from '../lib/exercises';
+import { proteinTarget } from '../lib/nutrition';
+import { latestScan } from '../lib/body';
 import { toNumber } from '../lib/scores';
 import { todayKey, prettyDate, relativeDay } from '../lib/dates';
 import EditGate, { useCanEdit } from '../components/EditGate';
@@ -35,12 +49,106 @@ function plannedLifts(session) {
     .filter(Boolean);
 }
 
-function SetForm({ open, onClose, onSave, exercise, lastSession }) {
+/**
+ * Body part, then lift.
+ *
+ * Typing an exercise name on a phone between sets is friction nobody accepts
+ * for long, so the default path is two taps. Lifts already trained come first,
+ * because those are the ones likely to recur, and anything missing can still be
+ * typed — the catalogue should never be a wall.
+ */
+function ExercisePicker({ open, onClose, onPick, history }) {
+  const [part, setPart] = useState(null);
+  const [custom, setCustom] = useState('');
+
+  const known = new Set(history.map((h) => h.exercise.toLowerCase()));
+  const list = part ? exercisesForPart(part) : [];
+  const mine = part
+    ? history.filter((h) => !exercisesForPart(part).some((e) => e.name.toLowerCase() === h.exercise.toLowerCase()))
+    : history;
+
+  return (
+    <Modal open={open} onClose={onClose} title={part ? 'Pick a lift' : 'What did you train?'} size="lg">
+      <div className="space-y-3">
+        {!part ? (
+          <>
+            <div className="grid grid-cols-2 gap-2">
+              {BODY_PARTS.map((b) => (
+                <button
+                  key={b.key}
+                  onClick={() => setPart(b.key)}
+                  className="flex items-center gap-2 rounded-xl border px-3 py-3 text-left transition-colors hover:border-accent"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  <span aria-hidden="true">{b.emoji}</span>
+                  <span className="text-sm font-medium">{b.label}</span>
+                </button>
+              ))}
+            </div>
+            {mine.length ? (
+              <div>
+                <p className="muted mb-1.5 text-[10px] font-semibold uppercase tracking-wider">Recently trained</p>
+                <div className="flex flex-wrap gap-1.5">
+                  {mine.slice(0, 8).map((h) => (
+                    <button
+                      key={h.exercise}
+                      onClick={() => onPick(h.exercise)}
+                      className="rounded-full border px-2.5 py-1.5 text-[11px] hover:border-accent hover:text-accent"
+                      style={{ borderColor: 'var(--border)' }}
+                    >
+                      {h.exercise}
+                    </button>
+                  ))}
+                </div>
+              </div>
+            ) : null}
+          </>
+        ) : (
+          <>
+            <button onClick={() => setPart(null)} className="muted text-[11px] hover:text-accent">
+              ← all body parts
+            </button>
+            <div className="space-y-1">
+              {list.map((e) => (
+                <button
+                  key={e.name}
+                  onClick={() => onPick(e.name)}
+                  className="flex w-full items-center justify-between rounded-xl border px-3 py-2 text-left transition-colors hover:border-accent"
+                  style={{ borderColor: 'var(--border)' }}
+                >
+                  <span className="text-xs font-medium">{e.name}</span>
+                  <span className="muted text-[10px]">
+                    {known.has(e.name.toLowerCase()) ? 'logged before' : e.muscles.join(', ')}
+                  </span>
+                </button>
+              ))}
+            </div>
+          </>
+        )}
+
+        <div className="border-t pt-3" style={{ borderColor: 'var(--border)' }}>
+          <p className="muted mb-1.5 text-[10px] font-semibold uppercase tracking-wider">Something else</p>
+          <div className="flex gap-2">
+            <Input
+              value={custom}
+              onChange={(e) => setCustom(e.target.value)}
+              placeholder="Name the exercise"
+              className="flex-1"
+            />
+            <Button icon={Search} disabled={!custom.trim()} onClick={() => onPick(custom.trim())}>
+              Add
+            </Button>
+          </div>
+        </div>
+      </div>
+    </Modal>
+  );
+}
+
+function SetForm({ open, onClose, onSave, exercise, lastSession, suggestion }) {
   const [reps, setReps] = useState('');
   const [weight, setWeight] = useState('');
   const [rpe, setRpe] = useState('');
-
-  const suggestion = lastSession?.best;
 
   return (
     <Modal
@@ -68,11 +176,24 @@ function SetForm({ open, onClose, onSave, exercise, lastSession }) {
       }
     >
       <div className="space-y-3">
-        {suggestion ? (
+        {lastSession?.best ? (
           <p className="muted rounded-xl px-2.5 py-2 text-[11px]" style={{ background: 'var(--bg-elevated)' }}>
-            Last time: <strong>{toNumber(suggestion.weight_kg)} kg × {toNumber(suggestion.reps)}</strong>
+            Last time: <strong>{toNumber(lastSession.best.weight_kg)} kg × {toNumber(lastSession.best.reps)}</strong>
             {lastSession.date ? ` (${relativeDay(lastSession.date)})` : ''}
           </p>
+        ) : null}
+
+        {suggestion ? (
+          <button
+            type="button"
+            onClick={() => { setWeight(String(suggestion.weight)); setReps(String(suggestion.reps)); }}
+            className="w-full rounded-xl px-2.5 py-2 text-left text-[11px] leading-relaxed"
+            style={{ background: '#38bdf814', color: '#38bdf8' }}
+          >
+            <strong>Suggested: {suggestion.weight} kg × {suggestion.reps}</strong>
+            {suggestion.change ? ` (${suggestion.change > 0 ? '+' : ''}${suggestion.change} kg)` : ''}
+            <span className="block opacity-80">{suggestion.reason} Tap to use.</span>
+          </button>
         ) : null}
         <div className="grid grid-cols-2 gap-2">
           <Field label="Weight">
@@ -91,11 +212,13 @@ function SetForm({ open, onClose, onSave, exercise, lastSession }) {
 }
 
 export default function Strength() {
-  const { strengthSets, workouts, plan, scores, health, addStrengthSet, deleteStrengthSet } = useDataStore();
+  const { strengthSets, workouts, plan, scores, health, meals, bodyComposition, addStrengthSet, deleteStrengthSet } =
+    useDataStore();
   const { user, profile } = useAuthStore();
   const canEdit = useCanEdit();
   const { findings } = useFindings();
   const [active, setActive] = useState(null);
+  const [picking, setPicking] = useState(false);
 
   const date = todayKey();
 
@@ -121,6 +244,23 @@ export default function Strength() {
   );
 
   const logged = useMemo(() => setsForDate(strengthSets, date), [strengthSets, date]);
+  const volume = useMemo(() => weeklyVolume(strengthSets), [strengthSets]);
+
+  // Stalls are diagnosed against nutrition and readiness, so a flat lift is
+  // reported with a cause rather than left as a shrug.
+  const target = useMemo(
+    () => proteinTarget({ profile, latestScan: latestScan(bodyComposition) }),
+    [profile, bodyComposition]
+  );
+  const stalls = useMemo(
+    () =>
+      exerciseList(strengthSets)
+        .map(({ exercise }) =>
+          detectStall(strengthSets, exercise, { nutrition: meals, scores, proteinTarget: target.grams })
+        )
+        .filter(Boolean),
+    [strengthSets, meals, scores, target.grams]
+  );
   const loggedNames = new Set(logged.map((g) => g.exercise.toLowerCase()));
   const suggestions = plannedLifts(prescription).filter((n) => !loggedNames.has(n.toLowerCase()));
   const history = useMemo(() => exerciseList(strengthSets), [strengthSets]);
@@ -225,6 +365,57 @@ export default function Strength() {
         );
       })}
 
+      {canEdit ? (
+        <Button size="lg" icon={Plus} className="w-full" onClick={() => setPicking(true)}>
+          Log a lift
+        </Button>
+      ) : null}
+
+      {stalls.map((stall) => (
+        <Card key={stall.exercise} delay={150}>
+          <CardBody className="flex items-start gap-3 p-4">
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: '#f9731614', color: '#f97316' }}>
+              <AlertTriangle size={15} aria-hidden="true" />
+            </span>
+            <div className="min-w-0 flex-1">
+              <p className="text-xs font-semibold">{stall.exercise} has stopped moving</p>
+              <p className="muted mt-0.5 text-[11px] leading-relaxed">
+                Estimated max {stall.from} → {stall.to} kg across {stall.sessions} sessions. {stall.detail}
+              </p>
+            </div>
+          </CardBody>
+        </Card>
+      ))}
+
+      {volume.length ? (
+        <Card delay={160}>
+          <CardHeader
+            title="This week's volume"
+            subtitle="Working sets per muscle — about 10 holds muscle in a deficit"
+            icon={BarChart3}
+          />
+          <CardBody className="space-y-1.5">
+            {volume.map((v) => (
+              <div key={v.muscle} className="flex items-center gap-2">
+                <span className="muted w-20 shrink-0 truncate text-[10px] capitalize">{v.muscle}</span>
+                <div className="h-2.5 flex-1 overflow-hidden rounded-full" style={{ background: 'var(--track)' }}>
+                  <div
+                    className="h-full rounded-full"
+                    style={{
+                      width: `${Math.min(100, (v.sets / v.target) * 100)}%`,
+                      background: v.enough ? '#22c55e' : '#f97316',
+                    }}
+                  />
+                </div>
+                <span className="w-12 shrink-0 text-right text-[10px] font-semibold tabular-nums">
+                  {v.sets}/{v.target}
+                </span>
+              </div>
+            ))}
+          </CardBody>
+        </Card>
+      ) : null}
+
       {suggestions.length && canEdit ? (
         <Card delay={140}>
           <CardHeader title="Today's programme" subtitle="Tap to start logging a lift" icon={Dumbbell} />
@@ -270,12 +461,20 @@ export default function Strength() {
         </Card>
       ) : null}
 
+      <ExercisePicker
+        open={picking}
+        onClose={() => setPicking(false)}
+        onPick={(name) => { setPicking(false); setActive(name); }}
+        history={history}
+      />
+
       <SetForm
         open={Boolean(active)}
         onClose={() => setActive(null)}
         onSave={save}
         exercise={active}
         lastSession={active ? progressFor(strengthSets, active)?.last : null}
+        suggestion={active ? suggestNextLoad(strengthSets, active) : null}
       />
     </div>
   );

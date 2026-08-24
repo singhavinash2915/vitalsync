@@ -142,6 +142,7 @@ export const useDataStore = create((set, get) => ({
   bodyComposition: [],
   strengthSets: [],
   nutrition: [],
+  meals: [],
 
   loading: true,
   saving: false,
@@ -164,6 +165,7 @@ export const useDataStore = create((set, get) => ({
       bodyComposition: [],
       strengthSets: [],
       nutrition: [],
+      meals: [],
       loading: true,
       error: null,
       lastSyncedAt: null,
@@ -254,6 +256,7 @@ export const useDataStore = create((set, get) => ({
         bodyComposition,
         strengthSets,
         nutrition,
+        meals,
       ] = await Promise.all([
         table('health_logs'),
         table('sleep_logs'),
@@ -294,6 +297,7 @@ export const useDataStore = create((set, get) => ({
           .limit(500),
         table('strength_sets'),
         table('nutrition_logs'),
+        table('meals'),
       ]);
 
       const firstError = [health, sleep, workouts, journal, scores].find((r) => r.error)?.error;
@@ -315,6 +319,7 @@ export const useDataStore = create((set, get) => ({
         bodyComposition: bodyComposition.error ? [] : (bodyComposition.data ?? []),
         strengthSets: strengthSets.error ? [] : (strengthSets.data ?? []),
         nutrition: nutrition.error ? [] : (nutrition.data ?? []),
+        meals: meals.error ? [] : (meals.data ?? []),
         loading: false,
         lastSyncedAt: new Date().toISOString(),
       });
@@ -406,6 +411,33 @@ export const useDataStore = create((set, get) => ({
     const { error } = await supabase.from('strength_sets').delete().eq('id', id);
     if (error) return { ok: false, message: describeError(error) };
     set((state) => ({ strengthSets: state.strengthSets.filter((r) => r.id !== id) }));
+    return { ok: true };
+  },
+
+  /**
+   * Logs one or more meals for a day.
+   *
+   * Meals are the only place food is stored — the day's macros are always
+   * summed from these rows rather than kept as a running total somewhere else,
+   * so there is no second copy to fall out of step.
+   */
+  logMeals: async ({ userId, date, rows }) => {
+    if (!canEdit()) return READ_ONLY;
+    if (!rows?.length) return { ok: true, count: 0 };
+
+    const payload = rows.map((r) => ({ ...r, user_id: userId, date }));
+    const { data, error } = await supabase.from('meals').insert(payload).select();
+    if (error) return { ok: false, message: describeError(error, 'Could not log that meal.') };
+
+    set((state) => ({ meals: [...(data ?? []), ...state.meals] }));
+    return { ok: true, count: data?.length ?? 0, data };
+  },
+
+  deleteMeal: async ({ id }) => {
+    if (!canEdit()) return READ_ONLY;
+    const { error } = await supabase.from('meals').delete().eq('id', id);
+    if (error) return { ok: false, message: describeError(error) };
+    set((state) => ({ meals: state.meals.filter((r) => r.id !== id) }));
     return { ok: true };
   },
 

@@ -5,6 +5,8 @@ import { Scale, Plus, Trash2, TrendingDown, AlertTriangle, Info, Check } from 'l
 import { useDataStore } from '../store/useDataStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { bodySummary, latestScan } from '../lib/body';
+import { cutCheck } from '../lib/cutcheck';
+import { proteinSummary, proteinTarget } from '../lib/nutrition';
 import { toNumber } from '../lib/scores';
 import { todayKey, shortDate, prettyDate } from '../lib/dates';
 import EditGate, { useCanEdit } from '../components/EditGate';
@@ -35,7 +37,7 @@ const FIELDS = [
   { key: 'target_weight_kg', label: 'Target weight', unit: 'kg', step: '0.1' },
 ];
 
-const TONE = { good: '#22c55e', bad: '#ef4444', info: '#38bdf8' };
+const TONE = { good: '#22c55e', bad: '#ef4444', warn: '#f97316', info: '#38bdf8' };
 
 function ScanForm({ open, onClose, onSave, saving }) {
   const [date, setDate] = useState(todayKey());
@@ -99,7 +101,7 @@ function ScanForm({ open, onClose, onSave, saving }) {
 }
 
 export default function Body() {
-  const { bodyComposition, saveBodyScan, deleteBodyScan, saving } = useDataStore();
+  const { bodyComposition, strengthSets, meals, saveBodyScan, deleteBodyScan, saving } = useDataStore();
   const { user, profile } = useAuthStore();
   const canEdit = useCanEdit();
   const [open, setOpen] = useState(false);
@@ -110,6 +112,19 @@ export default function Body() {
     [bodyComposition, profile]
   );
   const last = latestScan(bodyComposition);
+
+  // The verdict that needs both halves: strength held while fat falls is the
+  // only combination that means the cut is doing what the scan asked for.
+  const cut = useMemo(() => {
+    const target = proteinTarget({ profile, latestScan: last });
+    const protein = proteinSummary(meals, target.grams, 28);
+    return cutCheck({
+      scans: bodyComposition,
+      sets: strengthSets,
+      proteinAverage: protein.average,
+      proteinTarget: target.grams,
+    });
+  }, [bodyComposition, strengthSets, meals, profile, last]);
 
   const chart = useMemo(
     () =>
@@ -191,6 +206,24 @@ export default function Body() {
                 </div>
               </div>
             ) : null}
+          </CardBody>
+        </Card>
+      ) : null}
+
+      {cut ? (
+        <Card delay={20} className="overflow-hidden">
+          <div className="h-0.5 w-full" style={{ background: TONE[cut.tone] }} />
+          <CardBody className="flex items-start gap-2 pt-3">
+            <span
+              className="grid h-8 w-8 shrink-0 place-items-center rounded-xl"
+              style={{ background: `${TONE[cut.tone]}1a`, color: TONE[cut.tone] }}
+            >
+              {cut.tone === 'bad' ? <AlertTriangle size={15} /> : cut.tone === 'good' ? <Check size={15} /> : <Info size={15} />}
+            </span>
+            <div className="min-w-0 flex-1">
+              <h2 className="text-sm font-semibold">{cut.headline}</h2>
+              <p className="muted mt-0.5 text-xs leading-relaxed">{cut.detail}</p>
+            </div>
           </CardBody>
         </Card>
       ) : null}
