@@ -8,7 +8,7 @@ import { energyBalance, deficitTarget, balanceSummary, weeklyBalance } from '../
 import { proteinTarget, dayTotals, dayEntry, proteinSummary, findCachedEstimate, WHEY_PROTEIN_G } from '../lib/nutrition';
 import { parseMeal, totalsFor, toMealRow, searchFoods } from '../lib/foods';
 import { anonKey, functionsBaseUrl } from '../lib/supabase';
-import { toNumber } from '../lib/scores';
+import { toNumber, hasNumber } from '../lib/scores';
 import { todayKey, shortDate } from '../lib/dates';
 import EditGate, { useCanEdit } from '../components/EditGate';
 import { Card, CardHeader, CardBody, Button, Input, Modal } from '../components/ui';
@@ -374,9 +374,24 @@ export default function Nutrition() {
               <div key={m.id} className="flex items-center gap-2 rounded-xl border px-3 py-2" style={{ borderColor: 'var(--border)' }}>
                 <div className="min-w-0 flex-1">
                   <p className="truncate text-xs font-medium">{m.description}</p>
+                  {/*
+                    An unknown macro shows as a dash, not a zero. The rescued
+                    pre-meals rows carry protein and nothing else, and printing
+                    "0C · 0F · 0 kcal" would state as fact that a meal had no
+                    carbohydrate — the same null-as-zero mistake that has
+                    already produced a 0 bpm resting heart rate and a 0.0 VO2
+                    max in this app.
+                  */}
                   <p className="muted text-[10px] tabular-nums">
-                    {Math.round(toNumber(m.protein_g) ?? 0)}P · {Math.round(toNumber(m.carbs_g) ?? 0)}C ·{' '}
-                    {Math.round(toNumber(m.fat_g) ?? 0)}F · {Math.round(toNumber(m.kcal) ?? 0)} kcal
+                    {[
+                      ['P', m.protein_g],
+                      ['C', m.carbs_g],
+                      ['F', m.fat_g],
+                    ]
+                      .map(([unit, v]) => `${hasNumber(v) ? Math.round(toNumber(v)) : '—'}${unit}`)
+                      .join(' · ')}
+                    {' · '}
+                    {hasNumber(m.kcal) ? `${Math.round(toNumber(m.kcal))} kcal` : 'kcal unknown'}
                     {m.source === 'ai' ? ' · estimated' : ''}
                   </p>
                 </div>
