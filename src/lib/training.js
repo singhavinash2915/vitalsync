@@ -17,6 +17,8 @@ import { bandFor } from './scores';
  * you can act on.
  */
 
+import { activeLimits } from './limits';
+
 export const ACTIVITIES = {
   gym: { label: 'Gym', emoji: '🏋️', color: '#a855f7' },
   cricket: { label: 'Cricket', emoji: '🏏', color: '#22c55e' },
@@ -356,4 +358,85 @@ export function consecutiveLowDays(scores = [], threshold = 40) {
     count += 1;
   }
   return count;
+}
+
+
+/**
+ * The one line at the top of the dashboard.
+ *
+ * This used to be a four-case switch on the readiness band, which meant it said
+ * "Solid. Train as planned" at 9am on a rest day, at 9pm after a session was
+ * already finished, and on a morning the breathing-rate flag was firing. It was
+ * describing the score, not the day.
+ *
+ * Everything it needs is already computed elsewhere, so this composes rather
+ * than adds a fifth opinion: the planned session, whether training has already
+ * happened, how much of the day is spent, illness, and the knee restrictions.
+ * Ordered by what overrides what — an infection beats a good number, and work
+ * already done beats a plan to do it.
+ */
+export function heroAdvice({
+  readiness = null,
+  plan = [],
+  workoutsToday = [],
+  loadSoFar = null,
+  illness = null,
+  profile = null,
+  now = new Date(),
+} = {}) {
+  const session = sessionFor(plan, now);
+  const activity = session?.activity ?? 'rest';
+  const hour = now.getHours();
+  const band = readiness === null ? null : bandFor(readiness).key;
+
+  // 1. Illness overrides the score outright.
+  if (illness?.level === 'likely') {
+    return `Breathing rate up ${illness.respiratoryDelta}% for ${illness.days} nights. Whatever the number says, today is a rest day.`;
+  }
+
+  // 2. Work already done is a fact; a plan is only an intention.
+  const done = workoutsToday.filter((w) => Number(w.duration_mins) > 0);
+  if (done.length) {
+    const mins = done.reduce((sum, w) => sum + Number(w.duration_mins ?? 0), 0);
+    const kinds = [...new Set(done.map((w) => w.type).filter(Boolean))].join(' and ');
+    const spent = Number.isFinite(Number(loadSoFar)) ? Number(loadSoFar) : null;
+
+    if (spent !== null && readiness !== null && spent > readiness + 15) {
+      return `${mins} min of ${kinds || 'training'} done — and you have now spent more than today gave you. Eat, and keep the evening quiet.`;
+    }
+    return `${mins} min of ${kinds || 'training'} already logged. The rest of today is recovery, not more training.`;
+  }
+
+  // 3. Nothing planned.
+  if (activity === 'rest') {
+    return band === 'poor' || band === 'critical'
+      ? 'Rest day, and the numbers agree with it. Sleep and food are the session.'
+      : 'Rest day. Nothing to do here — that is the point of it.';
+  }
+
+  // 4. A session is ahead. Say which, and what it should look like.
+  const limits = activeLimits(profile);
+  const noun = activity === 'cricket' ? 'match' : 'gym session';
+  const when = hour < 11 ? 'this morning' : hour < 16 ? 'today' : 'this evening';
+
+  const shape = {
+    excellent: `push it, this is the one to add a set or chase a rep on`,
+    good: 'run it as written',
+    moderate: 'cut the volume but keep the weight',
+    poor: 'technique only, nothing to failure',
+    critical: 'skip it',
+  }[band === null ? 'good' : readiness < 25 ? 'critical' : band];
+
+  // Pointless on a session that is not happening — "skip it, and by the way no
+  // jumps" is advice about a workout nobody is doing.
+  const skipping = band === 'critical' || (readiness !== null && readiness < 25);
+  const kneeNote = skipping
+    ? ''
+    : limits.includes('no_plyometrics') && activity === 'gym'
+      ? ' Jumps stay out.'
+      : limits.includes('no_sprinting') && activity === 'cricket'
+        ? ' No full run-up.'
+        : '';
+
+  return `${noun.charAt(0).toUpperCase()}${noun.slice(1)} ${when} — ${shape}.${kneeNote}`;
 }

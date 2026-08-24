@@ -1,29 +1,33 @@
 import { useMemo, useState } from 'react';
 import { Link } from 'react-router-dom';
 import {
-  Plus,
-  HeartPulse,
-  Heart,
-  Footprints,
-  Flame,
-  Droplets,
-  Thermometer,
-  Moon,
-  Dumbbell,
-  ChevronRight,
+  Activity,
   CalendarDays,
+  ChevronRight,
+  Droplets,
+  Dumbbell,
+  Flame,
+  Footprints,
+  Heart,
+  HeartPulse,
+  Moon,
+  Plus,
+  Thermometer,
 } from 'lucide-react';
 
 import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
 import { computeDailyScores, scoreColor, scoreLabel, exertionLabel } from '../lib/scores';
-import { buildInsights, readinessAdvice, weeklySummary, personalRecords } from '../lib/insights';
+import { buildInsights, weeklySummary, personalRecords } from '../lib/insights';
+import { heroAdvice } from '../lib/training';
+import { detectIllnessSignal } from '../lib/illness';
 import { todayKey, prettyDateLong, formatHours } from '../lib/dates';
 import { ScoreRing } from '../components/ScoreRing';
 import { Card, CardHeader, CardBody, Button, Skeleton, EmptyState, Badge } from '../components/ui';
 import { InsightsList, WeeklySummaryCard, PersonalRecordsCard } from '../components/InsightsPanel';
 import DiscoveredFindingsCard from '../components/DiscoveredFindingsCard';
 import QuickLog from '../components/QuickLog';
+import RecoveryTrend from '../components/viz/RecoveryTrend';
 import ContributorBars from '../components/viz/ContributorBars';
 import { seriesColor } from '../lib/viz';
 import { useTheme } from '../context/ThemeContext';
@@ -99,7 +103,9 @@ function DashboardSkeleton() {
 export default function Dashboard() {
   const [detail, setDetail] = useState(null);
   const profile = useAuthStore((s) => s.profile);
+  const plan = useDataStore((s) => s.plan);
   const { isDark } = useTheme();
+
   const loading = useDataStore((s) => s.loading);
   const health = useDataStore((s) => s.health);
   const sleepLogs = useDataStore((s) => s.sleep);
@@ -190,6 +196,23 @@ export default function Dashboard() {
   if (loading) return <DashboardSkeleton />;
 
   const readiness = computed.readiness_score;
+
+  /*
+   * The hero line used to be a four-case switch on the band, so it said
+   * "Solid. Train as planned" at 9pm on a day already trained, on a rest day,
+   * and while the illness flag was firing. It now reads the actual day.
+   */
+  // Not memoised: it is a cheap pure call, and `readiness` is declared after
+  // the loading guard, so a hook here would be a conditional one.
+  const advice = heroAdvice({
+    readiness,
+    plan,
+    workoutsToday: workoutLogs.filter((w) => w.date === todayKey()),
+    loadSoFar: computed?.exertion_score,
+    illness: detectIllnessSignal(health),
+    profile,
+    now: new Date(),
+  });
   const firstName = profile?.name?.split(' ')[0];
 
   return (
@@ -227,7 +250,7 @@ export default function Dashboard() {
             style={{ color: computed.hasData ? 'var(--text)' : 'var(--text-muted)' }}
           >
             {computed.hasData
-              ? readinessAdvice(readiness)
+              ? advice
               : 'Nothing logged today yet. Add your morning numbers to generate today’s scores.'}
           </p>
 
@@ -280,6 +303,17 @@ export default function Dashboard() {
       </Card>
 
       <ReadinessWeek />
+
+      <Card delay={45}>
+        <CardHeader
+          title="Recovery against its inputs"
+          subtitle="Last 14 days, each against its own baseline"
+          icon={Activity}
+        />
+        <CardBody>
+          <RecoveryTrend days={14} />
+        </CardBody>
+      </Card>
 
       {/*
         The score, then the week it sits in, then what to do about it. Today's
