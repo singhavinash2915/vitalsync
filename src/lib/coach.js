@@ -2,6 +2,7 @@ import { bandFor } from './scores';
 import { shiftKey, todayKey } from './dates';
 import { sessionFor, ageFrom } from './training';
 import { detectIllnessSignal } from './illness';
+import { suggestNextLoad } from './strength';
 import { activeLimits, applyLimitsToBlocks, cricketLimitNote, LIMITS } from './limits';
 
 /**
@@ -440,3 +441,52 @@ export function coachContext({ health = [], sleep = [], scores = [], findings = 
 }
 
 export { GYM_DAYS, SCALING, CRICKET_OVERS };
+
+
+/**
+ * Today's prescription as concrete lifts and loads.
+ *
+ * The dashboard card's bullets were canned strings picked by band — "three
+ * working sets rather than five" said the same thing whoever you were and
+ * whatever you had lifted last week. Now that sets are logged, the same advice
+ * can name the actual movement and the actual weight, which is the difference
+ * between a principle and an instruction.
+ *
+ * Falls back to the written prescription for any lift with no history, because
+ * a first session has nothing to progress from and inventing a number would be
+ * worse than a general cue.
+ *
+ * @returns {string[]|null} null when there is no session to describe
+ */
+export function concreteActions({ session, sets = [], scale = 1 }) {
+  if (!session || session.skipped || session.activity !== 'gym') return null;
+
+  const main = (session.blocks ?? []).find((b) => b.name === 'Main');
+  if (!main?.items?.length) return null;
+
+  const out = [];
+  for (const item of main.items) {
+    // "Box squat to parallel 4×5 @ RPE 7" -> lift name, then its own scheme.
+    const name = item.replace(/[,–—-]?\s*\d+\s*×.*$/i, '').replace(/[,;:\s]+$/, '').trim() || item;
+    const suggestion = suggestNextLoad(sets, name);
+
+    if (!suggestion) {
+      // No history for this lift, so there is nothing to progress from. Show
+      // the written prescription, minus the punctuation a substitution leaves
+      // behind ("Split squat to a pad, 3×10 each leg").
+      out.push(item.replace(/,(\s*\d+\s*×)/, '$1'));
+      continue;
+    }
+
+    const sets_ = Math.max(2, Math.round(3 * scale));
+    const change =
+      suggestion.change > 0
+        ? ` (up ${suggestion.change} kg)`
+        : suggestion.change < 0
+          ? ` (down ${Math.abs(suggestion.change)} kg)`
+          : '';
+    out.push(`${name}: ${suggestion.weight} kg × ${suggestion.reps}, ${sets_} sets${change}`);
+  }
+
+  return out.length ? out : null;
+}

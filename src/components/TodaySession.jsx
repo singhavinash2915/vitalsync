@@ -4,8 +4,11 @@ import { CalendarCheck, AlertTriangle, Info, ChevronRight, CircleAlert } from 'l
 import clsx from 'clsx';
 
 import { useDataStore } from '../store/useDataStore';
+import { useAuthStore } from '../store/useAuthStore';
 import { ACTIVITIES, sessionFor, guidanceFor, consecutiveLowDays } from '../lib/training';
 import { detectIllnessSignal } from '../lib/illness';
+import { prescribeSession, concreteActions } from '../lib/coach';
+import { useFindings } from '../lib/useFindings';
 import { scoreColor, toNumber } from '../lib/scores';
 import { todayKey } from '../lib/dates';
 import { Card, CardBody, Badge } from './ui';
@@ -50,6 +53,10 @@ export default function TodaySession({ computed, health, sleep }) {
   const plan = useDataStore((s) => s.plan);
   const scores = useDataStore((s) => s.scores);
   const allHealth = useDataStore((s) => s.health);
+  const strengthSets = useDataStore((s) => s.strengthSets);
+  const workouts = useDataStore((s) => s.workouts);
+  const profile = useAuthStore((s) => s.profile);
+  const { findings } = useFindings();
   const now = useNow();
 
   const session = useMemo(() => sessionFor(plan ?? [], now), [plan, now]);
@@ -72,6 +79,33 @@ export default function TodaySession({ computed, health, sleep }) {
       illness: detectIllnessSignal(allHealth),
     });
   }, [computed, session, sleep, health, scores, now, allHealth]);
+
+  /*
+   * Replace the canned bullets with the actual lifts and loads where a history
+   * exists. "Three working sets rather than five" is a principle; "Box squat:
+   * 65 kg × 5, 3 sets (up 5 kg)" is an instruction.
+   */
+  const actions = useMemo(() => {
+    const prescription = prescribeSession({
+      readiness: computed?.readiness_score,
+      trend: scores.slice(-7).map((s) => s.readiness_score),
+      plan,
+      findings,
+      profile,
+      illness: detectIllnessSignal(allHealth),
+    });
+    const scale = { excellent: 1.2, good: 1, moderate: 0.7, poor: 0.5, critical: 0 }[prescription.band] ?? 1;
+    return concreteActions({ session: prescription, sets: strengthSets, scale }) ?? guidance.actions;
+  }, [computed, scores, plan, findings, profile, allHealth, strengthSets, guidance.actions]);
+
+  const overdue = useMemo(() => {
+    if (!session?.start_time) return false;
+    const [h, m] = session.start_time.split(':').map(Number);
+    const planned = new Date(now);
+    planned.setHours(h, m || 0, 0, 0);
+    const trainedToday = workouts.some((w) => w.date === todayKey() && Number(w.duration_mins) > 0);
+    return !trainedToday && now.getTime() - planned.getTime() > 2 * 3600 * 1000;
+  }, [session, now, workouts]);
 
   // Without a plan there is nothing to advise on; point at where to make one.
   if (!plan?.length) {
@@ -114,6 +148,12 @@ export default function TodaySession({ computed, health, sleep }) {
             {session?.start_time ? (
               <span className="muted ml-1.5 text-xs font-normal">
                 {session.start_time.slice(0, 5)}
+                {/*
+                  A 07:00 start shown at 9pm reads as a session about to happen.
+                  Once the hour has passed with nothing logged, say so — the
+                  card is describing something overdue, not upcoming.
+                */}
+                {overdue ? ' · overdue' : ''}
               </span>
             ) : null}
           </p>
@@ -135,9 +175,9 @@ export default function TodaySession({ computed, health, sleep }) {
           <p className="muted mt-1 text-xs leading-relaxed">{guidance.detail}</p>
         </div>
 
-        {guidance.actions.length ? (
+        {actions.length ? (
           <ul className="space-y-1.5">
-            {guidance.actions.map((action) => (
+            {actions.map((action) => (
               <li key={action} className="flex items-start gap-2 text-xs">
                 <span
                   className="mt-1.5 h-1.5 w-1.5 shrink-0 rounded-full"
