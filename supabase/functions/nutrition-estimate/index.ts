@@ -18,7 +18,21 @@ const CORS = {
   'Access-Control-Allow-Methods': 'POST, OPTIONS',
 };
 
-const MODEL = 'claude-sonnet-4-5';
+/**
+ * The cheapest current model, chosen deliberately.
+ *
+ * Haiku 4.5 is $1/$5 per million tokens against Sonnet's $3/$15 — a third of
+ * the cost — and neither job here is hard: the coach is handed a brief that has
+ * already done the arithmetic, and the estimator is reading portion sizes off a
+ * sentence. Both are language tasks, not reasoning ones.
+ *
+ * Note on prompt caching: it is NOT used, and that is not an oversight. The
+ * minimum cacheable prefix is about 1,024 tokens and the system prompt below is
+ * a third of that, so a `cache_control` breakpoint would be accepted and then
+ * silently cache nothing. The saving that actually exists here is not making
+ * the call at all — see the estimate reuse in src/lib/nutrition.js.
+ */
+const MODEL = 'claude-haiku-4-5';
 
 const SYSTEM = `You estimate the macronutrients of food described in plain language, usually Indian home cooking described in household portions — rotis, katoris, bowls, plates.
 
@@ -78,7 +92,7 @@ Deno.serve(async (req: Request) => {
       },
       body: JSON.stringify({
         model: MODEL,
-        max_tokens: 700,
+        max_tokens: 500,
         system: SYSTEM,
         messages: [{ role: 'user', content: description }],
       }),

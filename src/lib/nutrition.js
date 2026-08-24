@@ -105,3 +105,45 @@ export function proteinSummary(meals = [], target = 150, days = 7, supplements =
     coverage: `${totals.length} of ${days} days logged`,
   };
 }
+
+
+/**
+ * A previous estimate for the same thing, if there is one.
+ *
+ * The cheapest API call is the one never made. Estimates are stored on the meal
+ * they produced, so the second time the same food is described the answer is
+ * already in the database — and people eat the same things constantly. This is
+ * the real token saving; switching model tiers only changes the unit price.
+ *
+ * Matching is on the normalised description, so "Pizza slice" and "pizza
+ * slice " reuse the same answer.
+ */
+export function findCachedEstimate(meals = [], description) {
+  const key = String(description ?? '').toLowerCase().replace(/\s+/g, ' ').trim();
+  if (!key) return null;
+
+  const hit = [...meals]
+    .filter((m) => (m.source === 'ai' || m.source === 'repeat') && m.description)
+    .sort((a, b) => (a.date < b.date ? 1 : -1))
+    .find((m) => m.description.toLowerCase().replace(/\s+/g, ' ').trim() === key);
+
+  if (!hit) return null;
+  return {
+    items: [{
+      name: hit.description,
+      portion: hit.portion ?? '',
+      protein_g: toNumber(hit.protein_g) ?? 0,
+      carbs_g: toNumber(hit.carbs_g) ?? 0,
+      fat_g: toNumber(hit.fat_g) ?? 0,
+      kcal: toNumber(hit.kcal) ?? 0,
+    }],
+    total: {
+      protein_g: toNumber(hit.protein_g) ?? 0,
+      carbs_g: toNumber(hit.carbs_g) ?? 0,
+      fat_g: toNumber(hit.fat_g) ?? 0,
+      kcal: toNumber(hit.kcal) ?? 0,
+    },
+    confidence: hit.confidence ?? 'medium',
+    cached: true,
+  };
+}

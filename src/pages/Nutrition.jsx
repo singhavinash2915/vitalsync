@@ -1,10 +1,11 @@
 import { useMemo, useState } from 'react';
-import { Beef, Pill, Plus, Check, Trash2, Sparkles, Loader2, Search, RotateCcw } from 'lucide-react';
+import { Beef, Pill, Plus, Check, Trash2, Sparkles, Loader2, Search, RotateCcw, Flame } from 'lucide-react';
 
 import { useDataStore } from '../store/useDataStore';
 import { useAuthStore } from '../store/useAuthStore';
 import { latestScan } from '../lib/body';
-import { proteinTarget, dayTotals, dayEntry, proteinSummary, WHEY_PROTEIN_G } from '../lib/nutrition';
+import { energyBalance, deficitTarget, balanceSummary, weeklyBalance } from '../lib/energy';
+import { proteinTarget, dayTotals, dayEntry, proteinSummary, findCachedEstimate, WHEY_PROTEIN_G } from '../lib/nutrition';
 import { parseMeal, totalsFor, toMealRow, searchFoods } from '../lib/foods';
 import { anonKey, functionsBaseUrl } from '../lib/supabase';
 import { toNumber } from '../lib/scores';
@@ -27,7 +28,7 @@ const MACROS = [
  * API has already run out of credit once and a food log that stops working
  * when the balance does is not a food log.
  */
-function MealSheet({ open, onClose, onLog, recent }) {
+function MealSheet({ open, onClose, onLog, recent, meals }) {
   const [text, setText] = useState('');
   const [aiItems, setAiItems] = useState(null);
   const [asking, setAsking] = useState(false);
@@ -38,13 +39,24 @@ function MealSheet({ open, onClose, onLog, recent }) {
   const suggestions = useMemo(() => (text.trim().length > 1 ? searchFoods(text, 5) : []), [text]);
 
   const askAI = async () => {
+    const description = parsed.unmatched.join(', ');
+
+    // Answered before? Then there is nothing to ask. This is where the token
+    // saving actually comes from — the same lunch does not get re-estimated
+    // every week at a fraction of a cent a time.
+    const cached = findCachedEstimate(meals, description);
+    if (cached) {
+      setAiItems(cached);
+      return;
+    }
+
     setAsking(true);
     setError(null);
     try {
       const res = await fetch(`${functionsBaseUrl}/nutrition-estimate`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${anonKey}`, apikey: anonKey },
-        body: JSON.stringify({ description: parsed.unmatched.join(', ') }),
+        body: JSON.stringify({ description }),
       });
       const body = await res.json();
       if (!res.ok) throw new Error(body.message || 'Could not estimate that.');
@@ -171,7 +183,7 @@ function MealSheet({ open, onClose, onLog, recent }) {
                   </div>
                 ))}
                 <p className="muted text-[10px]">
-                  Estimated, {aiItems.confidence} confidence — edit after logging if it looks off.
+                  {aiItems.cached ? 'Reused from the last time you logged this' : `Estimated, ${aiItems.confidence} confidence`} — edit after logging if it looks off.
                 </p>
               </div>
             ) : (
@@ -188,7 +200,7 @@ function MealSheet({ open, onClose, onLog, recent }) {
 }
 
 export default function Nutrition() {
-  const { meals, nutrition, bodyComposition, logMeals, deleteMeal, saveNutrition } = useDataStore();
+  const { meals, nutrition, bodyComposition, health, logMeals, deleteMeal, saveNutrition } = useDataStore();
   const { user, profile } = useAuthStore();
   const canEdit = useCanEdit();
   const [open, setOpen] = useState(false);
@@ -201,6 +213,22 @@ export default function Nutrition() {
   const supplements = useMemo(() => dayEntry(nutrition, date), [nutrition, date]);
   const summary = useMemo(() => proteinSummary(meals, target.grams, 7, nutrition), [meals, target.grams, nutrition]);
   const todayMeals = useMemo(() => meals.filter((m) => m.date === date), [meals, date]);
+
+  // Named for the deficit, not "target" — the protein target above already
+  // owns that word on this page.
+  const deficit = useMemo(
+    () => deficitTarget({ scans: bodyComposition, goalWeightKg: profile?.goal_weight_kg, weeks: 8 }),
+    [bodyComposition, profile]
+  );
+  const balance = useMemo(
+    () => energyBalance({ meals, scans: bodyComposition, health, profile, date }),
+    [meals, bodyComposition, health, profile, date]
+  );
+  const week = useMemo(
+    () => weeklyBalance({ meals, scans: bodyComposition, health, profile }),
+    [meals, bodyComposition, health, profile]
+  );
+  const verdict = balanceSummary(balance, deficit);
 
   /** Distinct past meals, most recent first — the self-building food library. */
   const recent = useMemo(() => {
@@ -264,6 +292,79 @@ export default function Nutrition() {
           </Button>
         </CardBody>
       </Card>
+
+      {balance ? (
+        <Card delay={20}>
+          <CardHeader
+            title="Energy balance"
+            subtitle={`Burn ${balance.burn} kcal · BMR ${balance.bmr} ${balance.basis}`}
+            icon={Flame}
+          />
+          <CardBody className="space-y-3">
+            <div className="grid grid-cols-3 gap-1.5 text-center">
+              <div className="rounded-xl px-1 py-2" style={{ background: 'var(--bg-elevated)' }}>
+                <p className="text-sm font-bold tabular-nums" style={{ color: '#38bdf8' }}>{balance.intake}</p>
+                <p className="muted text-[9px]">eaten</p>
+              </div>
+              <div className="rounded-xl px-1 py-2" style={{ background: 'var(--bg-elevated)' }}>
+                <p className="text-sm font-bold tabular-nums" style={{ color: '#a855f7' }}>{balance.burn}</p>
+                <p className="muted text-[9px]">burned</p>
+              </div>
+              <div className="rounded-xl px-1 py-2" style={{ background: 'var(--bg-elevated)' }}>
+                <p
+                  className="text-sm font-bold tabular-nums"
+                  style={{ color: balance.balance === null ? 'var(--text-muted)' : balance.balance < 0 ? '#22c55e' : '#f97316' }}
+                >
+                  {balance.balance === null ? '—' : `${balance.balance > 0 ? '+' : ''}${balance.balance}`}
+                </p>
+                <p className="muted text-[9px]">{balance.balance !== null && balance.balance < 0 ? 'deficit' : 'balance'}</p>
+              </div>
+            </div>
+
+            {deficit ? (
+              <div>
+                <div className="mb-1 flex items-baseline justify-between text-[11px]">
+                  <span className="muted">
+                    {deficit.toLose} kg to {deficit.goal} kg in {deficit.weeks} weeks
+                  </span>
+                  <span className="font-semibold" style={{ color: '#38bdf8' }}>
+                    needs {deficit.perDay}/day
+                  </span>
+                </div>
+                {balance.balance !== null ? (
+                  <div className="h-2 overflow-hidden rounded-full" style={{ background: 'var(--track)' }}>
+                    <div
+                      className="h-full rounded-full transition-all"
+                      style={{
+                        width: `${Math.min(100, Math.max(0, (Math.abs(Math.min(0, balance.balance)) / deficit.perDay) * 100))}%`,
+                        background: '#22c55e',
+                      }}
+                    />
+                  </div>
+                ) : null}
+              </div>
+            ) : null}
+
+            {verdict ? (
+              <p className="text-[11px] leading-relaxed" style={{ color: verdict.tone === 'good' ? '#22c55e' : verdict.tone === 'warn' ? '#f97316' : 'var(--text-muted)' }}>
+                {verdict.text}
+              </p>
+            ) : null}
+
+            {week.loggedDays > 1 ? (
+              <p className="muted text-[11px]">
+                Averaging {week.average > 0 ? '+' : ''}{week.average} kcal across {week.loggedDays} logged days.
+              </p>
+            ) : null}
+
+            <p className="muted border-t pt-2 text-[10px] leading-relaxed" style={{ borderColor: 'var(--border)' }}>
+              Three estimates stacked: portion sizes, a bioimpedance BMR, and a wrist-worn activity
+              figure that is commonly out by a fifth. Treat this as a direction. If it says you are
+              well under and the scale has not moved in a month, believe the scale.
+            </p>
+          </CardBody>
+        </Card>
+      ) : null}
 
       {todayMeals.length ? (
         <Card delay={40}>
@@ -362,7 +463,7 @@ export default function Nutrition() {
         </CardBody>
       </Card>
 
-      <MealSheet open={open} onClose={() => setOpen(false)} onLog={log} recent={recent} />
+      <MealSheet open={open} onClose={() => setOpen(false)} onLog={log} recent={recent} meals={meals} />
     </div>
   );
 }
