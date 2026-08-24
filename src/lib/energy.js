@@ -73,18 +73,32 @@ export function energyBalance({ meals = [], scans = [], health = [], profile = n
   const intake = dayTotals(meals, date);
   const logged = intake.meals > 0;
 
+  /*
+   * A partly-logged day is not a deficit.
+   *
+   * One meal in the log made the arithmetic report 276 eaten against 2,478
+   * burned — a 2,200 kcal deficit, and the summary cheerfully called it "on
+   * pace". Nobody is 2,200 under; they just have not finished logging. Eating
+   * below basal metabolic rate for a day is possible but rare enough that the
+   * far likelier explanation is an incomplete log, so below that line the
+   * number is withheld rather than dressed up as progress.
+   */
+  const plausible = logged && intake.kcal >= burn.bmr;
+
   return {
     date,
     intake: intake.kcal,
     logged,
+    plausible,
     burn: burn.total,
     bmr: burn.bmr,
     active: burn.active,
     activeKnown: burn.activeKnown,
     basis: burn.basis,
-    // Negative is a deficit. Only meaningful once something has been eaten and
-    // logged — an unlogged day would otherwise read as a heroic fast.
-    balance: logged ? intake.kcal - burn.total : null,
+    // Negative is a deficit. Withheld until the day's log is plausible, so a
+    // half-finished one cannot masquerade as a heroic fast.
+    balance: plausible ? intake.kcal - burn.total : null,
+    rawBalance: logged ? intake.kcal - burn.total : null,
   };
 }
 
@@ -122,6 +136,8 @@ export function weeklyBalance({ meals = [], scans = [], health = [], profile = n
   const from = shiftKey(todayKey(), -(days - 1));
   const dates = [...new Set(meals.filter((m) => m.date >= from && m.date <= todayKey()).map((m) => m.date))];
 
+  // Same plausibility gate — a week average built from half-logged days would
+  // report a deficit nobody was running.
   const balances = dates
     .map((date) => energyBalance({ meals, scans, health, profile, date }))
     .filter((b) => b && b.balance !== null);
@@ -143,6 +159,13 @@ export function balanceSummary(balance, target) {
     return {
       tone: 'info',
       text: `Burning about ${balance.burn} kcal today (${balance.bmr} at rest${balance.activeKnown ? ` plus ${balance.active} active` : ', activity not yet synced'}). Log a meal to see the gap.`,
+    };
+  }
+
+  if (!balance.plausible) {
+    return {
+      tone: 'info',
+      text: `Only ${balance.intake} kcal logged so far, which is below your ${balance.bmr} kcal resting burn — almost certainly a part-finished log rather than a real deficit, so no figure is shown. Add the rest of the day and it will settle.`,
     };
   }
 
