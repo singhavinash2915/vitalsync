@@ -18,6 +18,9 @@ import Trends from './pages/Trends';
 import Biomarkers from './pages/Biomarkers';
 import Coach from './pages/Coach';
 import Insights from './pages/Insights';
+import Body from './pages/Body';
+import Strength from './pages/Strength';
+import Nutrition from './pages/Nutrition';
 import Plan from './pages/Plan';
 import Settings from './pages/Settings';
 import SetupRequired from './pages/SetupRequired';
@@ -121,6 +124,9 @@ export default function App() {
       <Route path="/biology" element={<Shell><Biomarkers /></Shell>} />
       <Route path="/coach" element={<Shell><Coach /></Shell>} />
       <Route path="/insights" element={<Shell><Insights /></Shell>} />
+      <Route path="/body" element={<Shell><Body /></Shell>} />
+      <Route path="/strength" element={<Shell><Strength /></Shell>} />
+      <Route path="/nutrition" element={<Shell><Nutrition /></Shell>} />
       <Route path="/plan" element={<Shell><Plan /></Shell>} />
       <Route path="/settings" element={<Shell><Settings /></Shell>} />
 

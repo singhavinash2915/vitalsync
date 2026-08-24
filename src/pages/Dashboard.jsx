@@ -23,6 +23,8 @@ import { ScoreRing, ScoreBar } from '../components/ScoreRing';
 import { Card, CardHeader, CardBody, Button, Skeleton, EmptyState, Badge } from '../components/ui';
 import { InsightsList, WeeklySummaryCard, PersonalRecordsCard } from '../components/InsightsPanel';
 import DiscoveredFindingsCard from '../components/DiscoveredFindingsCard';
+import QuickLog from '../components/QuickLog';
+import BodyCard from '../components/BodyCard';
 import { SyncStrip } from '../components/SyncStatus';
 import { Sparkline, TrendDelta } from '../components/Sparkline';
 import ScoreDetailSheet from '../components/ScoreDetailSheet';
@@ -189,6 +191,7 @@ export default function Dashboard() {
   return (
     <div className="space-y-4">
       <SyncStrip />
+      <QuickLog />
 
       {/* ---------------- Hero: readiness ---------------- */}
       <Card className="overflow-hidden">
@@ -435,6 +438,7 @@ export default function Dashboard() {
       ) : null}
 
       <InsightsList insights={insights} />
+      <BodyCard />
       <DiscoveredFindingsCard />
       <WeeklySummaryCard summary={summary} />
       <PersonalRecordsCard records={records} />

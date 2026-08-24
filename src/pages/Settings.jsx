@@ -11,6 +11,7 @@ import {
   Moon,
   RefreshCw,
   Save,
+  ShieldAlert,
   Smartphone,
   Sun,
   Trash2,
@@ -25,6 +26,7 @@ import { useDataStore } from '../store/useDataStore';
 import { functionsBaseUrl, supabase, describeError, anonKey } from '../lib/supabase';
 import { useTheme } from '../context/ThemeContext';
 import { DEFAULT_CALORIE_TARGET, suggestCalorieTarget, SCORING_VERSION } from '../lib/scores';
+import { LIMITS } from '../lib/limits';
 import { todayKey, relativeDay } from '../lib/dates';
 import {
   Card,
@@ -36,8 +38,7 @@ import {
   Select,
   Alert,
   Segmented,
-  Badge,
-} from '../components/ui';
+  Badge, Toggle } from '../components/ui';
 import EditGate, { useCanEdit } from '../components/EditGate';
 import ImportHealthModal from '../components/ImportHealthModal';
 import { SyncPanel } from '../components/SyncStatus';
@@ -646,6 +647,39 @@ export default function Settings() {
           >
             Refresh from Supabase
           </Button>
+        </CardBody>
+      </Card>
+
+      <Card>
+        <CardHeader
+          title="Training limits"
+          subtitle="What the coach must not prescribe"
+          icon={ShieldAlert}
+        />
+        <CardBody className="space-y-2">
+          <p className="muted text-xs leading-relaxed">
+            These are applied to every written session before you see it. Restricted movements are
+            swapped for a safe alternative and the swap is shown, so a session never quietly loses
+            its power work with no explanation.
+          </p>
+          {Object.entries(LIMITS).map(([key, limit]) => {
+            const on = (profile?.training_limits ?? []).includes(key);
+            return (
+              <Toggle
+                key={key}
+                checked={on}
+                disabled={!canEdit}
+                label={limit.label}
+                description={limit.detail}
+                onChange={() => {
+                  const current = profile?.training_limits ?? [];
+                  updateProfile({
+                    training_limits: on ? current.filter((k) => k !== key) : [...current, key],
+                  });
+                }}
+              />
+            );
+          })}
         </CardBody>
       </Card>
 

@@ -2,6 +2,7 @@ import { bandFor } from './scores';
 import { shiftKey, todayKey } from './dates';
 import { sessionFor, ageFrom } from './training';
 import { detectIllnessSignal } from './illness';
+import { activeLimits, applyLimitsToBlocks, cricketLimitNote, LIMITS } from './limits';
 
 /**
  * The trainer. Where `training.js` says how hard to go, this says what to do.
@@ -208,6 +209,7 @@ export function prescribeSession({
   const session = sessionFor(plan, new Date(`${date}T12:00:00`));
   const activity = session?.activity ?? 'rest';
   const band = bandKey(readiness, illness);
+  const limits = activeLimits(profile);
   const scale = SCALING[band];
   const ahead = lookAhead(plan, date);
   const notes = [];
@@ -256,11 +258,24 @@ export function prescribeSession({
           ? 'A reading this low on a day you have not trained is not training fatigue. Look at sleep, illness and stress before you look at your programme.'
           : 'Rest is the session. Adaptation happens now, not in the gym.',
       notes,
+      substitutions: [],
     };
   }
 
   if (activity === 'cricket') {
-    const overs = CRICKET_OVERS[band];
+    const banded = CRICKET_OVERS[band];
+    const kneeNote = cricketLimitNote(limits);
+    if (kneeNote) notes.push(kneeNote);
+
+    // A full run-up is a sprint. Whatever the morning's number says, it cannot
+    // unlock one while the knee is restricted, so the band sets the volume and
+    // the limit sets the approach.
+    const overs = limits.includes('no_sprinting')
+      ? {
+          overs: `${banded.overs.replace(/full run-up/i, 'off a walking run-up').replace(/, and only off a short run/i, ', off a walking run-up')}`,
+          field: 'Slip, point or inside the ring — nothing in the deep',
+        }
+      : banded;
     return {
       date,
       activity,
@@ -284,6 +299,7 @@ export function prescribeSession({
       ],
       rationale: `Sixteen overs of ${CRICKET_DEMANDS.fielding} is a load you cannot negotiate once you are on the field, so the bowling is the part you actually control.`,
       notes,
+      substitutions: [],
     };
   }
 
@@ -311,6 +327,12 @@ export function prescribeSession({
 
   const skipping = scale.volume === 0;
 
+  // Restricted movements are swapped before the session is shown, and the swap
+  // is carried out to the UI so it appears as a labelled substitution rather
+  // than a session that quietly lost its power work.
+  const { blocks: safeBlocks, substitutions } = applyLimitsToBlocks(blocks, limits);
+  blocks = safeBlocks;
+
   return {
     date,
     activity,
@@ -328,6 +350,7 @@ export function prescribeSession({
         ? 'There is no adaptation available at this level. A session now only deepens the hole.'
         : `${scale.note} Today is ${template.role.toLowerCase()} — ${template.focus.toLowerCase()}.`,
     notes,
+    substitutions,
     ageNote: profile && ageFrom(profile) ? `Programmed for ${ageFrom(profile)}` : null,
   };
 }
@@ -365,9 +388,15 @@ export function coachContext({ health = [], sleep = [], scores = [], findings = 
   });
 
   const illness = detectIllnessSignal(health);
+  const limits = activeLimits(profile);
 
   return {
     today: todayKey(),
+    // Named so the model refuses to suggest a restricted movement, rather than
+    // relying on it to infer the restriction from a session that lacks one.
+    ...(limits.length
+      ? { trainingLimits: limits.map((k) => `${LIMITS[k].label}: ${LIMITS[k].detail}`) }
+      : {}),
     // Present only when it fires, so its absence is not mistaken for a clean
     // bill of health the data cannot actually give.
     ...(illness

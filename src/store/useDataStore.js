@@ -1,7 +1,7 @@
 import { create } from 'zustand';
 import { supabase, describeError } from '../lib/supabase';
 import { useAuthStore } from './useAuthStore';
-import { computeDailyScores, SCORING_VERSION } from '../lib/scores';
+import { computeDailyScores, SCORING_VERSION, hasNumber } from '../lib/scores';
 import { HEALTH_COLUMNS } from '../lib/healthImport';
 import { todayKey, toKey, lastNDays, fromKey } from '../lib/dates';
 import { subDays } from 'date-fns';
@@ -134,6 +134,14 @@ export const useDataStore = create((set, get) => ({
   fullHistory: [],
   fullSleepHistory: [],
   fullHistoryLoading: false,
+  /**
+   * Body scans are taken every few weeks, so the 120-day window that suits the
+   * dashboard would leave a trend with one or two points in it. Loaded whole,
+   * for the same reason biomarkers are.
+   */
+  bodyComposition: [],
+  strengthSets: [],
+  nutrition: [],
 
   loading: true,
   saving: false,
@@ -153,6 +161,9 @@ export const useDataStore = create((set, get) => ({
       fullHistory: [],
       fullSleepHistory: [],
       fullHistoryLoading: false,
+      bodyComposition: [],
+      strengthSets: [],
+      nutrition: [],
       loading: true,
       error: null,
       lastSyncedAt: null,
@@ -231,8 +242,19 @@ export const useDataStore = create((set, get) => ({
         .order('date', { ascending: false });
 
     try {
-      const [health, sleep, workouts, journal, scores, snapshots, biomarkers, plan] =
-        await Promise.all([
+      const [
+        health,
+        sleep,
+        workouts,
+        journal,
+        scores,
+        snapshots,
+        biomarkers,
+        plan,
+        bodyComposition,
+        strengthSets,
+        nutrition,
+      ] = await Promise.all([
         table('health_logs'),
         table('sleep_logs'),
         table('workout_logs'),
@@ -263,6 +285,15 @@ export const useDataStore = create((set, get) => ({
           .select('*')
           .eq('user_id', userId)
           .order('starts_on', { ascending: false }),
+        // Unwindowed on purpose — see the note on the state field.
+        supabase
+          .from('body_composition')
+          .select('*')
+          .eq('user_id', userId)
+          .order('date', { ascending: false })
+          .limit(500),
+        table('strength_sets'),
+        table('nutrition_logs'),
       ]);
 
       const firstError = [health, sleep, workouts, journal, scores].find((r) => r.error)?.error;
@@ -279,6 +310,11 @@ export const useDataStore = create((set, get) => ({
         snapshots: snapshots.error ? [] : (snapshots.data ?? []),
         biomarkers: biomarkers.error ? [] : (biomarkers.data ?? []),
         plan: plan.error ? [] : (plan.data ?? []),
+        // Same treatment as snapshots: a project without migration 0011 must
+        // still load a dashboard rather than failing whole.
+        bodyComposition: bodyComposition.error ? [] : (bodyComposition.data ?? []),
+        strengthSets: strengthSets.error ? [] : (strengthSets.data ?? []),
+        nutrition: nutrition.error ? [] : (nutrition.data ?? []),
         loading: false,
         lastSyncedAt: new Date().toISOString(),
       });
@@ -288,6 +324,113 @@ export const useDataStore = create((set, get) => ({
         error: describeError(error, 'Could not load your health data.'),
       });
     }
+  },
+
+  /** Saves one InBody scan, keyed on its date. */
+  saveBodyScan: async ({ userId, scan }) => {
+    if (!canEdit()) return READ_ONLY;
+    set({ saving: true, error: null });
+
+    const row = { ...scan, user_id: userId };
+    const { data, error } = await supabase
+      .from('body_composition')
+      .upsert(row, { onConflict: 'user_id,date' })
+      .select()
+      .single();
+
+    if (error) {
+      const message = describeError(error, 'Could not save that scan.');
+      set({ saving: false, error: message });
+      return { ok: false, message };
+    }
+
+    /*
+     * Weight also belongs in health_logs.
+     *
+     * The Biology screen, the weight sparkline and the biomarker trend all read
+     * weight from there, so a scan that only wrote to its own table would be a
+     * second silo — the number would be on the Body page and missing everywhere
+     * it already had a home. Merged rather than overwritten so a day's synced
+     * HRV is not clobbered by a scan.
+     */
+    if (hasNumber(scan.weight_kg)) {
+      await supabase
+        .from('health_logs')
+        .upsert({ user_id: userId, date: scan.date, weight_kg: scan.weight_kg },
+          { onConflict: 'user_id,date' });
+    }
+
+    set((state) => ({
+      bodyComposition: [data, ...state.bodyComposition.filter((r) => r.date !== data.date)].sort(
+        byDateDesc
+      ),
+      saving: false,
+    }));
+    await get().loadAll(userId, { silent: true });
+    return { ok: true, data };
+  },
+
+  deleteBodyScan: async ({ userId, date }) => {
+    if (!canEdit()) return READ_ONLY;
+    const { error } = await supabase
+      .from('body_composition')
+      .delete()
+      .eq('user_id', userId)
+      .eq('date', date);
+    if (error) return { ok: false, message: describeError(error) };
+    set((state) => ({ bodyComposition: state.bodyComposition.filter((r) => r.date !== date) }));
+    return { ok: true };
+  },
+
+  /**
+   * Logs one set.
+   *
+   * `workoutId` links it to the session Apple Health already recorded, so the
+   * app never creates a second workout row for a session the watch has
+   * captured — the point is to add what was lifted, not to re-record that
+   * lifting happened.
+   */
+  addStrengthSet: async ({ userId, date, workoutId = null, set: entry }) => {
+    if (!canEdit()) return READ_ONLY;
+
+    const row = { ...entry, user_id: userId, date, workout_id: workoutId };
+    const { data, error } = await supabase.from('strength_sets').insert(row).select().single();
+    if (error) return { ok: false, message: describeError(error, 'Could not log that set.') };
+
+    set((state) => ({ strengthSets: [data, ...state.strengthSets] }));
+    return { ok: true, data };
+  },
+
+  deleteStrengthSet: async ({ id }) => {
+    if (!canEdit()) return READ_ONLY;
+    const { error } = await supabase.from('strength_sets').delete().eq('id', id);
+    if (error) return { ok: false, message: describeError(error) };
+    set((state) => ({ strengthSets: state.strengthSets.filter((r) => r.id !== id) }));
+    return { ok: true };
+  },
+
+  /** Upserts today's nutrition row. Partial patches are merged, not replaced. */
+  saveNutrition: async ({ userId, date, patch }) => {
+    if (!canEdit()) return READ_ONLY;
+
+    const existing = get().nutrition.find((r) => r.date === date) ?? {};
+    const row = { user_id: userId, date, ...existing, ...patch };
+    delete row.id;
+    delete row.created_at;
+    delete row.updated_at;
+
+    const { data, error } = await supabase
+      .from('nutrition_logs')
+      .upsert(row, { onConflict: 'user_id,date' })
+      .select()
+      .single();
+
+    if (error) return { ok: false, message: describeError(error, 'Could not save that.') };
+
+    set((state) => ({
+      nutrition: [data, ...state.nutrition.filter((r) => r.date !== date)].sort(byDateDesc),
+    }));
+    return { ok: true, data };
   },
 
   // --- selectors ------------------------------------------------------------
