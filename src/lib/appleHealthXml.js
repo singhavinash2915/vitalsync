@@ -130,7 +130,8 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
   // steps against the 10,715 the Health app reports.
   const totals = new Map(); // date -> { column: { sum, count } }
   const sourceTotals = new Map(); // date -> { column: { source: total } }
-  const sleepByDate = new Map(); // date -> hours asleep
+  const sleepByDate = new Map();
+  const sleepWindowByDate = new Map(); // date -> { start, end } in epoch ms
   const stagesByDate = new Map(); // date -> { deep_hours, rem_hours, ... }
   let recordsSeen = 0;
 
@@ -203,6 +204,21 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
 
         if (ASLEEP_VALUES.has(state)) {
           sleepByDate.set(date, (sleepByDate.get(date) ?? 0) + hours);
+
+          /*
+           * Keep WHEN the night happened, not just how long it was.
+           *
+           * These timestamps were read and then thrown away, which left
+           * bedtime and wake_time null on every night ever imported — so the
+           * one thing that most often explains a bad morning, a night that
+           * started at 2am, was invisible. Earliest asleep start and latest
+           * asleep end across the night's fragments; Awake and InBed are
+           * excluded, so this is time asleep rather than time in bed.
+           */
+          const window = sleepWindowByDate.get(date) ?? { start, end };
+          window.start = Math.min(window.start, start);
+          window.end = Math.max(window.end, end);
+          sleepWindowByDate.set(date, window);
         }
         if (stageColumn) {
           const night = stagesByDate.get(date) ?? {};
@@ -271,6 +287,20 @@ export async function parseAppleHealthXml(file, { onProgress } = {}) {
     let sleep = null;
     if (hours && hours >= 0.75) {
       sleep = { duration_hours: Math.round(hours * 100) / 100 };
+
+      // Local wall-clock, because "went to bed at 23:40" is a fact about the
+      // evening, not about UTC — storing the shifted time would make a
+      // regularity chart show a schedule nobody kept.
+      const window = sleepWindowByDate.get(date);
+      if (window) {
+        const clock = (ms) => {
+          const d = new Date(ms);
+          return `${String(d.getHours()).padStart(2, '0')}:${String(d.getMinutes()).padStart(2, '0')}`;
+        };
+        sleep.bedtime = clock(window.start);
+        sleep.wake_time = clock(window.end);
+      }
+
       const stages = stagesByDate.get(date);
       if (stages) {
         for (const [key, v] of Object.entries(stages)) {

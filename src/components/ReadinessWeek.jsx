@@ -134,7 +134,7 @@ export default function ReadinessWeek({ days = 7 }) {
                 <ReferenceArea
                   y1={band[0]}
                   y2={band[1]}
-                  fill="#38bdf8"
+                  fill="var(--viz-1)"
                   fillOpacity={0.09}
                   strokeOpacity={0}
                 />
@@ -169,7 +169,7 @@ export default function ReadinessWeek({ days = 7 }) {
                 {points.map((p) => (
                   <Cell
                     key={p.date}
-                    fill={p.activity ? (ACTIVITIES[p.activity]?.color ?? '#a855f7') : '#a855f7'}
+                    fill={p.activity ? (ACTIVITIES[p.activity]?.color ?? 'var(--viz-2)') : 'var(--viz-2)'}
                   />
                 ))}
               </Bar>
@@ -177,7 +177,7 @@ export default function ReadinessWeek({ days = 7 }) {
               <Line
                 type="monotone"
                 dataKey="readiness"
-                stroke="#22c55e"
+                stroke="var(--viz-1)"
                 strokeWidth={2.5}
                 connectNulls={false}
                 dot={(props) => {
@@ -203,11 +203,11 @@ export default function ReadinessWeek({ days = 7 }) {
 
         <div className="mt-1 flex flex-wrap items-center gap-x-3 gap-y-1 text-[10px]">
           <span className="flex items-center gap-1">
-            <span className="h-0.5 w-3 rounded" style={{ background: '#22c55e' }} aria-hidden="true" />
+            <span className="h-0.5 w-3 rounded" style={{ background: 'var(--viz-1)' }} aria-hidden="true" />
             <span className="muted">Readiness</span>
           </span>
           <span className="flex items-center gap-1">
-            <span className="h-2 w-2 rounded-sm" style={{ background: '#a855f755' }} aria-hidden="true" />
+            <span className="h-2 w-2 rounded-sm" style={{ background: 'color-mix(in srgb, var(--viz-2) 33%, transparent)' }} aria-hidden="true" />
             <span className="muted">Load, coloured by planned session</span>
           </span>
         </div>

@@ -89,7 +89,7 @@ export function WeeklySummaryCard({ summary }) {
     { key: 'sleep', label: 'Sleep' },
     // Exertion measures load, not quality — it keeps the purple it has on the
     // dashboard ring rather than being scored green-to-red.
-    { key: 'exertion', label: 'Exertion', neutral: true, color: '#a855f7' },
+    { key: 'exertion', label: 'Exertion', neutral: true, color: 'var(--viz-2)' },
   ];
 
   return (

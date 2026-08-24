@@ -19,11 +19,14 @@ import { useDataStore } from '../store/useDataStore';
 import { computeDailyScores, scoreColor, scoreLabel, exertionLabel } from '../lib/scores';
 import { buildInsights, readinessAdvice, weeklySummary, personalRecords } from '../lib/insights';
 import { todayKey, prettyDateLong, formatHours } from '../lib/dates';
-import { ScoreRing, ScoreBar } from '../components/ScoreRing';
+import { ScoreRing } from '../components/ScoreRing';
 import { Card, CardHeader, CardBody, Button, Skeleton, EmptyState, Badge } from '../components/ui';
 import { InsightsList, WeeklySummaryCard, PersonalRecordsCard } from '../components/InsightsPanel';
 import DiscoveredFindingsCard from '../components/DiscoveredFindingsCard';
 import QuickLog from '../components/QuickLog';
+import ContributorBars from '../components/viz/ContributorBars';
+import { seriesColor } from '../lib/viz';
+import { useTheme } from '../context/ThemeContext';
 import BodyCard from '../components/BodyCard';
 import { SyncStrip } from '../components/SyncStatus';
 import { Sparkline, TrendDelta } from '../components/Sparkline';
@@ -50,7 +53,7 @@ function MetricTile({
   color,
 }) {
   const empty = value === null || value === undefined || value === '';
-  const accent = color ?? (tone === 'accent' ? '#38bdf8' : '#ef4444');
+  const accent = color ?? (tone === 'accent' ? 'var(--viz-1)' : 'var(--status-poor)');
 
   return (
     <div
@@ -96,6 +99,7 @@ function DashboardSkeleton() {
 export default function Dashboard() {
   const [detail, setDetail] = useState(null);
   const profile = useAuthStore((s) => s.profile);
+  const { isDark } = useTheme();
   const loading = useDataStore((s) => s.loading);
   const health = useDataStore((s) => s.health);
   const sleepLogs = useDataStore((s) => s.sleep);
@@ -253,7 +257,7 @@ export default function Dashboard() {
               key: 'exertion',
               label: 'Load today',
               value: computed.exertion_score,
-              color: '#a855f7',
+              color: 'var(--viz-2)',
               statusLabel: exertionLabel(computed.exertion_score),
             },
           ].map((ring) => (
@@ -332,7 +336,7 @@ export default function Dashboard() {
             raw={daySleep?.duration_hours}
             baseline={computed.breakdown.baselines.sleep}
             trend={trends.sleep}
-            color="#818cf8"
+            color="var(--viz-1)"
             hint={daySleep?.quality_rating ? `rated ${daySleep.quality_rating}/5` : 'not rated'}
           />
           <MetricTile
@@ -343,7 +347,7 @@ export default function Dashboard() {
             raw={dayHealth?.active_calories}
             baseline={computed.breakdown.exertion.target}
             trend={trends.active_calories}
-            color="#f97316"
+            color="var(--status-moderate)"
             hint={`target ${computed.breakdown.exertion.target}`}
           />
           <MetricTile
@@ -351,7 +355,7 @@ export default function Dashboard() {
             label="Steps"
             value={dayHealth?.steps?.toLocaleString() ?? null}
             trend={trends.steps}
-            color="#22c55e"
+            color="var(--status-excellent)"
           />
           <MetricTile
             icon={Droplets}
@@ -388,26 +392,19 @@ export default function Dashboard() {
             subtitle="Each component before weighting"
           />
           <CardBody className="space-y-3">
-            <ScoreBar
-              label="HRV vs baseline (60% of recovery)"
-              value={computed.breakdown.recovery.hrvScore}
-            />
-            <ScoreBar
-              label="Resting HR vs baseline (40% of recovery)"
-              value={computed.breakdown.recovery.rhrScore}
-            />
-            <ScoreBar
-              label="Sleep duration (60% of sleep)"
-              value={computed.breakdown.sleep.duration}
-            />
-            <ScoreBar
-              label="Sleep quality (40% of sleep)"
-              value={computed.breakdown.sleep.quality}
-            />
-            <ScoreBar
-              label="Active calories vs target"
-              value={computed.breakdown.exertion.calorieScore}
-              color="#a855f7"
+            {/*
+              Each input carries its weight in the label. The old row of bare
+              percentages showed the numbers without saying which of them
+              mattered — a 40% component and a 60% one looked identical.
+            */}
+            <ContributorBars
+              items={[
+                { label: 'HRV vs baseline', weight: '60% of recovery', value: computed.breakdown.recovery.hrvScore, color: seriesColor(0, isDark) },
+                { label: 'Resting HR vs baseline', weight: '40% of recovery', value: computed.breakdown.recovery.rhrScore, color: seriesColor(0, isDark) },
+                { label: 'Sleep duration', weight: '60% of sleep', value: computed.breakdown.sleep.duration, color: seriesColor(2, isDark) },
+                { label: 'Sleep quality', weight: '40% of sleep', value: computed.breakdown.sleep.quality, color: seriesColor(2, isDark) },
+                { label: 'Active calories vs target', weight: 'load', value: computed.breakdown.exertion.calorieScore, color: seriesColor(1, isDark) },
+              ]}
             />
 
             {computed.breakdown.recovery.modifiers.length ? (
@@ -419,14 +416,14 @@ export default function Dashboard() {
                   {computed.breakdown.recovery.modifiers.map((m) => (
                     <Badge
                       key={m.label}
-                      color={m.value > 0 ? '#22c55e' : '#ef4444'}
+                      color={m.value > 0 ? 'var(--status-excellent)' : 'var(--status-poor)'}
                     >
                       {m.label} {m.value > 0 ? '+' : ''}
                       {m.value}
                     </Badge>
                   ))}
                   {computed.breakdown.exertion.intensityBonus ? (
-                    <Badge color="#a855f7">
+                    <Badge color="var(--viz-2)">
                       Workout intensity +{computed.breakdown.exertion.intensityBonus}
                     </Badge>
                   ) : null}

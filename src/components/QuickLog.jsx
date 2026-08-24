@@ -12,10 +12,10 @@ import { Card, CardBody } from './ui';
  * actually opens on.
  */
 const ACTIONS = [
-  { to: '/nutrition', label: 'Protein', icon: Beef, color: '#f97316' },
-  { to: '/strength', label: 'Lifts', icon: Dumbbell, color: '#a855f7' },
-  { to: '/body', label: 'Body scan', icon: Scale, color: '#38bdf8' },
-  { to: '/log', label: 'Vitals', icon: HeartPulse, color: '#22c55e' },
+  { to: '/nutrition', label: 'Protein', icon: Beef, color: 'var(--status-moderate)' },
+  { to: '/strength', label: 'Lifts', icon: Dumbbell, color: 'var(--viz-2)' },
+  { to: '/body', label: 'Body scan', icon: Scale, color: 'var(--viz-1)' },
+  { to: '/log', label: 'Vitals', icon: HeartPulse, color: 'var(--status-excellent)' },
 ];
 
 export default function QuickLog() {

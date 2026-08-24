@@ -123,7 +123,7 @@ export default function Journal() {
           title="Daily journal"
           subtitle={relativeDay(date)}
           icon={NotebookPen}
-          action={existing ? <Badge color="#22c55e">Logged</Badge> : null}
+          action={existing ? <Badge color="var(--status-excellent)">Logged</Badge> : null}
         />
         <CardBody>
           <EditGate className="mb-3" />
@@ -196,7 +196,7 @@ export default function Journal() {
                 <span className="text-xs font-medium">Net effect on recovery</span>
                 <span
                   className="text-lg font-bold tabular-nums"
-                  style={{ color: total > 0 ? '#22c55e' : total < 0 ? '#ef4444' : 'var(--text-muted)' }}
+                  style={{ color: total > 0 ? 'var(--status-excellent)' : total < 0 ? 'var(--status-poor)' : 'var(--text-muted)' }}
                 >
                   {total > 0 ? '+' : ''}
                   {total}
@@ -205,7 +205,7 @@ export default function Journal() {
               {applied.length ? (
                 <div className="mt-2 flex flex-wrap gap-1.5">
                   {applied.map((m) => (
-                    <Badge key={m.label} color={m.value > 0 ? '#22c55e' : '#ef4444'}>
+                    <Badge key={m.label} color={m.value > 0 ? 'var(--status-excellent)' : 'var(--status-poor)'}>
                       {m.label} {m.value > 0 ? '+' : ''}
                       {m.value}
                     </Badge>
@@ -253,7 +253,7 @@ export default function Journal() {
                       className="text-xs font-bold tabular-nums"
                       style={{
                         color:
-                          entryTotal > 0 ? '#22c55e' : entryTotal < 0 ? '#ef4444' : 'var(--text-muted)',
+                          entryTotal > 0 ? 'var(--status-excellent)' : entryTotal < 0 ? 'var(--status-poor)' : 'var(--text-muted)',
                       }}
                     >
                       {entryTotal > 0 ? '+' : ''}
@@ -261,11 +261,11 @@ export default function Journal() {
                     </span>
                   </div>
                   <div className="mt-1.5 flex flex-wrap gap-1">
-                    {entry.alcohol ? <Badge color="#ef4444">Alcohol</Badge> : null}
-                    {entry.travel ? <Badge color="#f97316">Travel</Badge> : null}
-                    {entry.meditation ? <Badge color="#22c55e">Meditation</Badge> : null}
-                    {entry.stress_level >= 4 ? <Badge color="#ef4444">High stress</Badge> : null}
-                    {entry.diet_quality >= 4 ? <Badge color="#22c55e">Good diet</Badge> : null}
+                    {entry.alcohol ? <Badge color="var(--status-poor)">Alcohol</Badge> : null}
+                    {entry.travel ? <Badge color="var(--status-moderate)">Travel</Badge> : null}
+                    {entry.meditation ? <Badge color="var(--status-excellent)">Meditation</Badge> : null}
+                    {entry.stress_level >= 4 ? <Badge color="var(--status-poor)">High stress</Badge> : null}
+                    {entry.diet_quality >= 4 ? <Badge color="var(--status-excellent)">Good diet</Badge> : null}
                   </div>
                   {entry.notes ? (
                     <p className="muted mt-1.5 line-clamp-2 text-xs italic">{entry.notes}</p>

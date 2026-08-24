@@ -234,10 +234,10 @@ export default function Workouts() {
                         <Badge
                           color={
                             workout.intensity >= 8
-                              ? '#ef4444'
+                              ? 'var(--status-poor)'
                               : workout.intensity >= 6
-                                ? '#f97316'
-                                : '#22c55e'
+                                ? 'var(--status-moderate)'
+                                : 'var(--status-excellent)'
                           }
                         >
                           {workout.intensity}/10

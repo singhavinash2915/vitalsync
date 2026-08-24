@@ -11,6 +11,8 @@
  * flag for another.
  */
 
+import { statusColor } from './viz';
+
 /**
  * How many days of history form the personal baseline.
  *
@@ -52,11 +54,24 @@ export const SCORING_VERSION = 4;
  */
 export const MIN_BASELINE_DAYS = 5;
 
+/**
+ * Colours come from `lib/viz.js` rather than living here.
+ *
+ * The previous set failed validation on this app's own dark surface: "Good" and
+ * "Excellent" were 4.2 apart under protanopia — the same colour to a red-green
+ * colourblind reader — and "Moderate" and "Poor" were 10.4 apart, below the
+ * floor at which full colour vision separates a pair. Those four bands drive
+ * every training decision the app makes.
+ *
+ * The replacement is stepped so lightness is monotone with visible gaps, which
+ * means the bands stay readable in greyscale and under any colour-vision
+ * deficiency, and it is never rendered without its label.
+ */
 export const SCORE_BANDS = [
-  { min: 80, key: 'excellent', label: 'Excellent', color: '#22c55e' },
-  { min: 60, key: 'good', label: 'Good', color: '#eab308' },
-  { min: 40, key: 'moderate', label: 'Moderate', color: '#f97316' },
-  { min: 0, key: 'poor', label: 'Poor', color: '#ef4444' },
+  { min: 80, key: 'excellent', label: 'Excellent' },
+  { min: 60, key: 'good', label: 'Good' },
+  { min: 40, key: 'moderate', label: 'Moderate' },
+  { min: 0, key: 'poor', label: 'Poor' },
 ];
 
 export function bandFor(score) {
@@ -64,7 +79,11 @@ export function bandFor(score) {
   return SCORE_BANDS.find((b) => value >= b.min) ?? SCORE_BANDS[SCORE_BANDS.length - 1];
 }
 
-export const scoreColor = (score) => bandFor(score).color;
+/**
+ * @param {number} score
+ * @param {boolean} isDark  which stepping to use — dark is the app's default
+ */
+export const scoreColor = (score, isDark = true) => statusColor(bandFor(score).key, isDark);
 export const scoreLabel = (score) => bandFor(score).label;
 
 /**

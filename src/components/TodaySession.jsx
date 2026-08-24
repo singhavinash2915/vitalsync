@@ -11,9 +11,9 @@ import { todayKey } from '../lib/dates';
 import { Card, CardBody, Badge } from './ui';
 
 const FLAG_TONE = {
-  bad: { icon: CircleAlert, color: '#ef4444' },
-  warn: { icon: AlertTriangle, color: '#f97316' },
-  info: { icon: Info, color: '#38bdf8' },
+  bad: { icon: CircleAlert, color: 'var(--status-poor)' },
+  warn: { icon: AlertTriangle, color: 'var(--status-moderate)' },
+  info: { icon: Info, color: 'var(--viz-1)' },
 };
 
 const PART_OF_DAY_LABEL = {

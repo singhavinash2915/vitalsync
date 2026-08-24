@@ -129,7 +129,7 @@ function ScoringStatus() {
         <span className="font-semibold">Scoring formula</span>
         <span
           className="flex items-center gap-1 font-semibold"
-          style={{ color: current ? '#22c55e' : '#f97316' }}
+          style={{ color: current ? 'var(--status-excellent)' : 'var(--status-moderate)' }}
         >
           {current ? <Check size={12} aria-hidden="true" /> : <AlertTriangle size={12} aria-hidden="true" />}
           v{stored ?? '—'} {current ? 'up to date' : `— code is on v${SCORING_VERSION}`}
@@ -526,7 +526,7 @@ export default function Settings() {
           <div>
             <div className="mb-1 flex items-center justify-between gap-2">
               <p className="muted text-[10px] uppercase tracking-wide">Sync key</p>
-              {syncKeys.length ? <Badge color="#22c55e">{syncKeys.length} active</Badge> : null}
+              {syncKeys.length ? <Badge color="var(--status-excellent)">{syncKeys.length} active</Badge> : null}
             </div>
 
             {newKey ? (

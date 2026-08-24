@@ -24,9 +24,9 @@ import { anonKey, functionsBaseUrl } from '../lib/supabase';
 import { Card, CardBody, CardHeader, Button, TextArea, Badge, EmptyState } from '../components/ui';
 
 const NOTE_TONE = {
-  bad: { icon: CircleAlert, color: '#ef4444' },
-  warn: { icon: AlertTriangle, color: '#f97316' },
-  info: { icon: Info, color: '#38bdf8' },
+  bad: { icon: CircleAlert, color: 'var(--status-poor)' },
+  warn: { icon: AlertTriangle, color: 'var(--status-moderate)' },
+  info: { icon: Info, color: 'var(--viz-1)' },
 };
 
 const STARTERS = [
@@ -252,7 +252,7 @@ export default function Coach() {
           {chatError ? (
             <p
               className="rounded-xl px-2.5 py-2 text-[11px] leading-relaxed"
-              style={{ background: '#ef444414', color: '#ef4444' }}
+              style={{ background: 'color-mix(in srgb, var(--status-poor) 12%, transparent)', color: 'var(--status-poor)' }}
             >
               {chatError}
             </p>

@@ -7,7 +7,7 @@ import { useAuthStore } from '../store/useAuthStore';
 import { bodySummary } from '../lib/body';
 import { Card, CardBody } from './ui';
 
-const TONE = { good: '#22c55e', bad: '#ef4444', info: '#38bdf8' };
+const TONE = { good: 'var(--status-excellent)', bad: 'var(--status-poor)', info: 'var(--viz-1)' };
 
 /** Dashboard doorway into body composition. Silent until there is a scan. */
 export default function BodyCard() {

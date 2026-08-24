@@ -129,7 +129,7 @@ export default function ReadinessToday() {
         title="Today's load against your readiness"
         subtitle={`${points.length} readings · ${first.label} to ${last.label}`}
         icon={Activity}
-        action={<Badge color="#a855f7">+{loadGained} load</Badge>}
+        action={<Badge color="var(--viz-2)">+{loadGained} load</Badge>}
       />
       <CardBody>
         <div className="h-40 w-full">
@@ -137,8 +137,8 @@ export default function ReadinessToday() {
             <AreaChart data={points} margin={{ top: 6, right: 8, bottom: 0, left: -26 }}>
               <defs>
                 <linearGradient id="loadToday" x1="0" y1="0" x2="0" y2="1">
-                  <stop offset="0%" stopColor="#a855f7" stopOpacity={0.45} />
-                  <stop offset="100%" stopColor="#a855f7" stopOpacity={0.02} />
+                  <stop offset="0%" stopColor="var(--viz-2)" stopOpacity={0.45} />
+                  <stop offset="100%" stopColor="var(--viz-2)" stopOpacity={0.02} />
                 </linearGradient>
               </defs>
               <XAxis
@@ -172,7 +172,7 @@ export default function ReadinessToday() {
               <Area
                 type="monotone"
                 dataKey="exertion"
-                stroke="#a855f7"
+                stroke="var(--viz-4)"
                 strokeWidth={2.5}
                 fill="url(#loadToday)"
                 activeDot={{ r: 4 }}
@@ -180,7 +180,7 @@ export default function ReadinessToday() {
               <Area
                 type="monotone"
                 dataKey="readiness"
-                stroke="#38bdf8"
+                stroke="var(--viz-1)"
                 strokeWidth={2}
                 fill="none"
                 dot={false}

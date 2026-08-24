@@ -231,7 +231,7 @@ export function RatingScale({ value, onChange, max = 5, labels, colorRamp = fals
         {Array.from({ length: max }, (_, i) => i + 1).map((n) => {
           const active = Number(value) === n;
           const ramp = colorRamp
-            ? ['#22c55e', '#4ade80', '#eab308', '#f97316', '#ef4444'][
+            ? ['var(--status-excellent)', 'var(--status-excellent)', 'var(--status-good)', 'var(--status-moderate)', 'var(--status-poor)'][
                 Math.floor(((n - 1) / max) * 5)
               ]
             : null;
@@ -248,7 +248,7 @@ export function RatingScale({ value, onChange, max = 5, labels, colorRamp = fals
                   ? 'border-transparent text-ink-900'
                   : 'border-[color:var(--border)] bg-[color:var(--bg-sunken)] hover:border-accent/50'
               )}
-              style={active ? { background: ramp ?? '#38bdf8' } : undefined}
+              style={active ? { background: ramp ?? 'var(--viz-1)' } : undefined}
             >
               {n}
             </button>

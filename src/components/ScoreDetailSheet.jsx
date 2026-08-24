@@ -47,7 +47,7 @@ export default function ScoreDetailSheet({ open, onClose, metric, computed, heal
   const TITLES = {
     recovery: { title: 'Recovery', icon: HeartPulse, color: scoreColor(score) },
     sleep: { title: 'Sleep', icon: Moon, color: scoreColor(score) },
-    exertion: { title: 'Exertion', icon: Flame, color: '#a855f7' },
+    exertion: { title: 'Exertion', icon: Flame, color: 'var(--viz-2)' },
     readiness: { title: 'Readiness', icon: Activity, color: scoreColor(score) },
   };
   const meta = TITLES[metric];
@@ -63,7 +63,7 @@ export default function ScoreDetailSheet({ open, onClose, metric, computed, heal
             value={score}
             size={92}
             stroke={9}
-            color={metric === 'exertion' ? '#a855f7' : undefined}
+            color={metric === 'exertion' ? 'var(--viz-2)' : undefined}
           />
           <div className="min-w-0 flex-1">
             <Badge color={meta.color}>{status}</Badge>
@@ -112,7 +112,7 @@ export default function ScoreDetailSheet({ open, onClose, metric, computed, heal
             {breakdown.recovery.modifiers.length ? (
               <div className="flex flex-wrap gap-1.5">
                 {breakdown.recovery.modifiers.map((m) => (
-                  <Badge key={m.label} color={m.value > 0 ? '#22c55e' : '#ef4444'}>
+                  <Badge key={m.label} color={m.value > 0 ? 'var(--status-excellent)' : 'var(--status-poor)'}>
                     {m.label} {m.value > 0 ? '+' : ''}
                     {m.value}
                   </Badge>
@@ -172,7 +172,7 @@ export default function ScoreDetailSheet({ open, onClose, metric, computed, heal
             <ScoreBar
               label="Active calories vs target"
               value={breakdown.exertion.calorieScore}
-              color="#a855f7"
+              color="var(--viz-2)"
             />
             <div className="rounded-xl border p-3" style={{ borderColor: 'var(--border)' }}>
               <Row

@@ -169,7 +169,7 @@ export default function LogHealth() {
           title="Health metrics"
           subtitle={relativeDay(date)}
           icon={HeartPulse}
-          action={existing ? <Badge color="#22c55e">Logged</Badge> : null}
+          action={existing ? <Badge color="var(--status-excellent)">Logged</Badge> : null}
         />
         <CardBody>
           <Field label="Date" className="mb-4">

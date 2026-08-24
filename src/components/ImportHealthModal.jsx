@@ -220,7 +220,7 @@ export default function ImportHealthModal({ open, onClose }) {
               >
                 <div className="mb-2 flex items-center justify-between gap-2">
                   <span className="text-xs font-semibold">Ready to import</span>
-                  <Badge color="#22c55e">{parsed.format}</Badge>
+                  <Badge color="var(--status-excellent)">{parsed.format}</Badge>
                 </div>
 
                 <dl className="space-y-1 text-xs">
@@ -244,7 +244,7 @@ export default function ImportHealthModal({ open, onClose }) {
 
                 <div className="mt-2 flex flex-wrap gap-1">
                   {parsed.metrics.map((m) => (
-                    <Badge key={m} color="#38bdf8">
+                    <Badge key={m} color="var(--viz-1)">
                       {COLUMN_LABELS[m] ?? m}
                     </Badge>
                   ))}

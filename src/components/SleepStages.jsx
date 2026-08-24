@@ -16,19 +16,19 @@ import { formatHours } from '../lib/dates';
  * unlike HRV these ranges genuinely are population-level.
  */
 const STAGES = [
-  { key: 'deep_hours', label: 'Deep', color: '#6366f1', healthy: [0.13, 0.23], note: 'physical repair' },
-  { key: 'rem_hours', label: 'REM', color: '#38bdf8', healthy: [0.2, 0.25], note: 'memory, mood' },
-  { key: 'core_hours', label: 'Core', color: '#818cf8', healthy: [0.45, 0.65], note: 'the bulk of the night' },
-  { key: 'awake_hours', label: 'Awake', color: '#f97316', healthy: [0, 0.08], note: 'interruptions' },
+  { key: 'deep_hours', label: 'Deep', color: 'var(--viz-1)', healthy: [0.13, 0.23], note: 'physical repair' },
+  { key: 'rem_hours', label: 'REM', color: 'var(--viz-1)', healthy: [0.2, 0.25], note: 'memory, mood' },
+  { key: 'core_hours', label: 'Core', color: 'var(--viz-1)', healthy: [0.45, 0.65], note: 'the bulk of the night' },
+  { key: 'awake_hours', label: 'Awake', color: 'var(--status-moderate)', healthy: [0, 0.08], note: 'interruptions' },
 ];
 
 const verdict = (fraction, [lo, hi]) => {
   if (!Number.isFinite(fraction)) return null;
-  if (fraction >= lo && fraction <= hi) return { label: 'Good', color: '#22c55e' };
+  if (fraction >= lo && fraction <= hi) return { label: 'Good', color: 'var(--status-excellent)' };
   // Being *below* the healthy band matters for restorative stages; being above
   // only matters for time awake.
-  if (fraction < lo) return { label: 'Low', color: '#f97316' };
-  return { label: 'High', color: '#f97316' };
+  if (fraction < lo) return { label: 'Low', color: 'var(--status-moderate)' };
+  return { label: 'High', color: 'var(--status-moderate)' };
 };
 
 export default function SleepStages({ night }) {
@@ -49,7 +49,7 @@ export default function SleepStages({ night }) {
         title="Last night, stage by stage"
         subtitle={`${formatHours(total)} asleep${awake > 0 ? ` · ${formatHours(awake)} awake` : ''}`}
         icon={Moon}
-        action={derived !== null ? <Badge color="#38bdf8">Quality {derived}</Badge> : null}
+        action={derived !== null ? <Badge color="var(--viz-1)">Quality {derived}</Badge> : null}
       />
       <CardBody className="space-y-3">
         {/* Proportional bar across the whole sleep window */}
@@ -131,7 +131,7 @@ export default function SleepStages({ night }) {
             <span className="text-xs font-medium">Sleep efficiency</span>
             <span
               className="text-sm font-bold tabular-nums"
-              style={{ color: efficiency >= 90 ? '#22c55e' : efficiency >= 80 ? '#eab308' : '#f97316' }}
+              style={{ color: efficiency >= 90 ? 'var(--status-excellent)' : efficiency >= 80 ? 'var(--status-good)' : 'var(--status-moderate)' }}
             >
               {efficiency.toFixed(0)}%
             </span>

@@ -22,7 +22,7 @@ const TREND_ICON = { Rising: TrendingUp, Falling: TrendingDown, Stable: Minus };
  */
 function BiomarkerCard({ marker, delay }) {
   const TrendIcon = marker.trend ? (TREND_ICON[marker.trend.label] ?? Minus) : null;
-  const accent = marker.rating?.color ?? '#38bdf8';
+  const accent = marker.rating?.color ?? 'var(--viz-1)';
 
   return (
     <Card delay={delay} className="p-4">

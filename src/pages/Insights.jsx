@@ -5,10 +5,10 @@ import { useFindings } from '../lib/useFindings';
 import { Card, CardBody, EmptyState } from '../components/ui';
 
 const TONE = {
-  bad: { bar: '#ef4444', chip: 'text-score-poor bg-score-poor/10' },
-  warn: { bar: '#f97316', chip: 'text-score-moderate bg-score-moderate/10' },
-  good: { bar: '#22c55e', chip: 'text-score-excellent bg-score-excellent/10' },
-  info: { bar: '#38bdf8', chip: 'text-accent bg-accent/10' },
+  bad: { bar: 'var(--status-poor)', chip: 'text-score-poor bg-score-poor/10' },
+  warn: { bar: 'var(--status-moderate)', chip: 'text-score-moderate bg-score-moderate/10' },
+  good: { bar: 'var(--status-excellent)', chip: 'text-score-excellent bg-score-excellent/10' },
+  info: { bar: 'var(--viz-1)', chip: 'text-accent bg-accent/10' },
 };
 
 /**
@@ -72,7 +72,7 @@ function MiniTable({ rows }) {
                   width: `${Math.max(width, 2)}%`,
                   left: raw || positive ? (raw ? 0 : '50%') : undefined,
                   right: !raw && !positive ? '50%' : undefined,
-                  background: raw ? '#38bdf8' : positive ? '#22c55e' : '#ef4444',
+                  background: raw ? 'var(--viz-1)' : positive ? 'var(--status-excellent)' : 'var(--status-poor)',
                 }}
               />
             </div>

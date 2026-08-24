@@ -12,6 +12,28 @@
     --text: #0d1117;
     --text-muted: #5b6673;
     --track: #e6e9ee;
+
+    /*
+     * Data colour. Two palettes because colour does two jobs, and mixing them
+     * is what produced ten ad-hoc hexes across a hundred-odd usages, with the
+     * same green meaning "excellent score", "protein on target" and "muscle".
+     *
+     * --viz-N  identity: which series is this. Fixed slot order, never cycled.
+     * --status-*  state: how is this going. Reserved for the score bands.
+     *
+     * Both sets were checked with the data-viz validator against these exact
+     * surfaces, not chosen by eye.
+     */
+    --viz-1: #2a78d6;
+    --viz-2: #eb6834;
+    --viz-3: #1baf7a;
+    --viz-4: #eda100;
+    --viz-other: #8494a6;
+
+    --status-poor: #7d2b2b;
+    --status-moderate: #bd6a12;
+    --status-good: #a8ad2e;
+    --status-excellent: #45c894;
   }
 
   .dark {
@@ -23,6 +45,18 @@
     --text: #e8eef5;
     --text-muted: #8494a6;
     --track: #1b2530;
+
+    /* Same hues, re-stepped for the dark surface — not an automatic flip. */
+    --viz-1: #3987e5;
+    --viz-2: #d95926;
+    --viz-3: #199e70;
+    --viz-4: #c98500;
+    --viz-other: #5b6673;
+
+    --status-poor: #b83f3f;
+    --status-moderate: #d1721f;
+    --status-good: #dfa81a;
+    --status-excellent: #6fe3ae;
   }
 
   html,

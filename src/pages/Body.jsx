@@ -37,7 +37,7 @@ const FIELDS = [
   { key: 'target_weight_kg', label: 'Target weight', unit: 'kg', step: '0.1' },
 ];
 
-const TONE = { good: '#22c55e', bad: '#ef4444', warn: '#f97316', info: '#38bdf8' };
+const TONE = { good: 'var(--status-excellent)', bad: 'var(--status-poor)', warn: 'var(--status-moderate)', info: 'var(--viz-1)' };
 
 function ScanForm({ open, onClose, onSave, saving }) {
   const [date, setDate] = useState(todayKey());
@@ -242,11 +242,11 @@ export default function Body() {
                     labelStyle={{ color: 'var(--text-muted)' }}
                   />
                   {goal?.goal ? (
-                    <ReferenceLine y={goal.goal} stroke="#38bdf8" strokeDasharray="4 4" label={{ value: 'goal', fontSize: 9, fill: '#38bdf8' }} />
+                    <ReferenceLine y={goal.goal} stroke="var(--viz-1)" strokeDasharray="4 4" label={{ value: 'goal', fontSize: 9, fill: 'var(--viz-1)' }} />
                   ) : null}
-                  <Line type="monotone" dataKey="weight" name="Weight" stroke="#38bdf8" strokeWidth={2.5} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="fat" name="Fat mass" stroke="#ef4444" strokeWidth={2} dot={{ r: 3 }} />
-                  <Line type="monotone" dataKey="muscle" name="Muscle" stroke="#22c55e" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="weight" name="Weight" stroke="var(--viz-1)" strokeWidth={2.5} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="fat" name="Fat mass" stroke="var(--viz-2)" strokeWidth={2} dot={{ r: 3 }} />
+                  <Line type="monotone" dataKey="muscle" name="Muscle" stroke="var(--viz-3)" strokeWidth={2} dot={{ r: 3 }} />
                 </LineChart>
               </ResponsiveContainer>
             </div>
@@ -284,7 +284,7 @@ export default function Body() {
                     {scan.visceral_fat_level ? ` · visceral ${scan.visceral_fat_level}` : ''}
                   </p>
                 </div>
-                {scan.inbody_score ? <Badge color="#38bdf8">{scan.inbody_score}</Badge> : null}
+                {scan.inbody_score ? <Badge color="var(--viz-1)">{scan.inbody_score}</Badge> : null}
                 {canEdit ? (
                   <button
                     onClick={() => deleteBodyScan({ userId: user.id, date: scan.date })}

@@ -188,7 +188,7 @@ function SetForm({ open, onClose, onSave, exercise, lastSession, suggestion }) {
             type="button"
             onClick={() => { setWeight(String(suggestion.weight)); setReps(String(suggestion.reps)); }}
             className="w-full rounded-xl px-2.5 py-2 text-left text-[11px] leading-relaxed"
-            style={{ background: '#38bdf814', color: '#38bdf8' }}
+            style={{ background: 'color-mix(in srgb, var(--viz-1) 12%, transparent)', color: 'var(--viz-1)' }}
           >
             <strong>Suggested: {suggestion.weight} kg × {suggestion.reps}</strong>
             {suggestion.change ? ` (${suggestion.change > 0 ? '+' : ''}${suggestion.change} kg)` : ''}
@@ -285,7 +285,7 @@ export default function Strength() {
           title={prescription.title}
           subtitle={prettyDate(date)}
           icon={Dumbbell}
-          action={syncedSession ? <Badge color="#22c55e">synced</Badge> : null}
+          action={syncedSession ? <Badge color="var(--status-excellent)">synced</Badge> : null}
         />
         <CardBody className="space-y-2">
           {syncedSession ? (
@@ -306,7 +306,7 @@ export default function Strength() {
                 <p
                   key={s.replaced}
                   className="rounded-xl px-2.5 py-1.5 text-[10px] leading-relaxed"
-                  style={{ background: '#f9731614', color: '#f97316' }}
+                  style={{ background: 'color-mix(in srgb, var(--status-moderate) 12%, transparent)', color: 'var(--status-moderate)' }}
                 >
                   <s>{s.replaced}</s> → <strong>{s.text}</strong> ({s.why})
                 </p>
@@ -374,7 +374,7 @@ export default function Strength() {
       {stalls.map((stall) => (
         <Card key={stall.exercise} delay={150}>
           <CardBody className="flex items-start gap-3 p-4">
-            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: '#f9731614', color: '#f97316' }}>
+            <span className="grid h-8 w-8 shrink-0 place-items-center rounded-xl" style={{ background: 'color-mix(in srgb, var(--status-moderate) 12%, transparent)', color: 'var(--status-moderate)' }}>
               <AlertTriangle size={15} aria-hidden="true" />
             </span>
             <div className="min-w-0 flex-1">
@@ -403,7 +403,7 @@ export default function Strength() {
                     className="h-full rounded-full"
                     style={{
                       width: `${Math.min(100, (v.sets / v.target) * 100)}%`,
-                      background: v.enough ? '#22c55e' : '#f97316',
+                      background: v.enough ? 'var(--status-excellent)' : 'var(--status-moderate)',
                     }}
                   />
                 </div>

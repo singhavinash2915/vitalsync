@@ -118,7 +118,7 @@ export function TrendDelta({ value, baseline, unit = '%', goodDirection = 'up', 
   const flat = Math.abs(pct) < 1.5;
   const isGood = goodDirection === 'up' ? pct > 0 : pct < 0;
 
-  const color = flat ? 'var(--text-muted)' : isGood ? '#22c55e' : '#f97316';
+  const color = flat ? 'var(--text-muted)' : isGood ? 'var(--status-excellent)' : 'var(--status-moderate)';
   const arrow = flat ? '→' : pct > 0 ? '↑' : '↓';
 
   return (

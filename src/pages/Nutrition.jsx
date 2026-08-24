@@ -14,10 +14,10 @@ import EditGate, { useCanEdit } from '../components/EditGate';
 import { Card, CardHeader, CardBody, Button, Input, Modal } from '../components/ui';
 
 const MACROS = [
-  { key: 'protein_g', label: 'Protein', unit: 'g', color: '#22c55e' },
-  { key: 'carbs_g', label: 'Carbs', unit: 'g', color: '#38bdf8' },
-  { key: 'fat_g', label: 'Fat', unit: 'g', color: '#f97316' },
-  { key: 'kcal', label: 'Calories', unit: '', color: '#a855f7' },
+  { key: 'protein_g', label: 'Protein', unit: 'g', color: 'var(--status-excellent)' },
+  { key: 'carbs_g', label: 'Carbs', unit: 'g', color: 'var(--viz-1)' },
+  { key: 'fat_g', label: 'Fat', unit: 'g', color: 'var(--status-moderate)' },
+  { key: 'kcal', label: 'Calories', unit: '', color: 'var(--viz-2)' },
 ];
 
 /**
@@ -170,8 +170,8 @@ function MealSheet({ open, onClose, onLog, recent, meals }) {
         ) : null}
 
         {parsed.unmatched.length ? (
-          <div className="space-y-2 rounded-xl p-2.5" style={{ background: '#f9731614' }}>
-            <p className="text-[11px] leading-relaxed" style={{ color: '#f97316' }}>
+          <div className="space-y-2 rounded-xl p-2.5" style={{ background: 'color-mix(in srgb, var(--status-moderate) 12%, transparent)' }}>
+            <p className="text-[11px] leading-relaxed" style={{ color: 'var(--status-moderate)' }}>
               Not in the food list: <strong>{parsed.unmatched.join(', ')}</strong>
             </p>
             {aiItems ? (
@@ -258,7 +258,7 @@ export default function Nutrition() {
       <Card delay={0}>
         <CardBody className="space-y-4 pt-5">
           <div className="text-center">
-            <p className="text-4xl font-bold tabular-nums" style={{ color: pct >= 90 ? '#22c55e' : '#f97316' }}>
+            <p className="text-4xl font-bold tabular-nums" style={{ color: pct >= 90 ? 'var(--status-excellent)' : 'var(--status-moderate)' }}>
               {totals.protein_g}
               <span className="ml-1 text-lg font-semibold" style={{ color: 'var(--text-muted)' }}>
                 / {target.grams} g
@@ -273,7 +273,7 @@ export default function Nutrition() {
           </div>
 
           <div className="h-2.5 overflow-hidden rounded-full" style={{ background: 'var(--track)' }}>
-            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: pct >= 90 ? '#22c55e' : '#f97316' }} />
+            <div className="h-full rounded-full transition-all" style={{ width: `${pct}%`, background: pct >= 90 ? 'var(--status-excellent)' : 'var(--status-moderate)' }} />
           </div>
 
           <div className="grid grid-cols-4 gap-1.5">
@@ -303,17 +303,17 @@ export default function Nutrition() {
           <CardBody className="space-y-3">
             <div className="grid grid-cols-3 gap-1.5 text-center">
               <div className="rounded-xl px-1 py-2" style={{ background: 'var(--bg-elevated)' }}>
-                <p className="text-sm font-bold tabular-nums" style={{ color: '#38bdf8' }}>{balance.intake}</p>
+                <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--viz-1)' }}>{balance.intake}</p>
                 <p className="muted text-[9px]">eaten</p>
               </div>
               <div className="rounded-xl px-1 py-2" style={{ background: 'var(--bg-elevated)' }}>
-                <p className="text-sm font-bold tabular-nums" style={{ color: '#a855f7' }}>{balance.burn}</p>
+                <p className="text-sm font-bold tabular-nums" style={{ color: 'var(--viz-2)' }}>{balance.burn}</p>
                 <p className="muted text-[9px]">burned</p>
               </div>
               <div className="rounded-xl px-1 py-2" style={{ background: 'var(--bg-elevated)' }}>
                 <p
                   className="text-sm font-bold tabular-nums"
-                  style={{ color: balance.balance === null ? 'var(--text-muted)' : balance.balance < 0 ? '#22c55e' : '#f97316' }}
+                  style={{ color: balance.balance === null ? 'var(--text-muted)' : balance.balance < 0 ? 'var(--status-excellent)' : 'var(--status-moderate)' }}
                 >
                   {balance.balance === null ? '—' : `${balance.balance > 0 ? '+' : ''}${balance.balance}`}
                 </p>
@@ -327,7 +327,7 @@ export default function Nutrition() {
                   <span className="muted">
                     {deficit.toLose} kg to {deficit.goal} kg in {deficit.weeks} weeks
                   </span>
-                  <span className="font-semibold" style={{ color: '#38bdf8' }}>
+                  <span className="font-semibold" style={{ color: 'var(--viz-1)' }}>
                     needs {deficit.perDay}/day
                   </span>
                 </div>
@@ -337,7 +337,7 @@ export default function Nutrition() {
                       className="h-full rounded-full transition-all"
                       style={{
                         width: `${Math.min(100, Math.max(0, (Math.abs(Math.min(0, balance.balance)) / deficit.perDay) * 100))}%`,
-                        background: '#22c55e',
+                        background: 'var(--status-excellent)',
                       }}
                     />
                   </div>
@@ -346,7 +346,7 @@ export default function Nutrition() {
             ) : null}
 
             {verdict ? (
-              <p className="text-[11px] leading-relaxed" style={{ color: verdict.tone === 'good' ? '#22c55e' : verdict.tone === 'warn' ? '#f97316' : 'var(--text-muted)' }}>
+              <p className="text-[11px] leading-relaxed" style={{ color: verdict.tone === 'good' ? 'var(--status-excellent)' : verdict.tone === 'warn' ? 'var(--status-moderate)' : 'var(--text-muted)' }}>
                 {verdict.text}
               </p>
             ) : null}
@@ -416,9 +416,9 @@ export default function Nutrition() {
               await log([{ description: 'Whey protein', portion: '1 scoop', protein_g: WHEY_PROTEIN_G, carbs_g: 2, fat_g: 1.5, kcal: 120, source: 'supplement', confidence: 'high' }]);
             }}
             className="flex flex-col items-center gap-1 rounded-xl border px-3 py-3 disabled:opacity-50"
-            style={{ borderColor: supplements.whey_scoops ? '#22c55e' : 'var(--border)', background: supplements.whey_scoops ? '#22c55e14' : 'transparent' }}
+            style={{ borderColor: supplements.whey_scoops ? 'var(--status-excellent)' : 'var(--border)', background: supplements.whey_scoops ? 'color-mix(in srgb, var(--status-excellent) 12%, transparent)' : 'transparent' }}
           >
-            <Beef size={17} style={{ color: supplements.whey_scoops ? '#22c55e' : 'var(--text-muted)' }} />
+            <Beef size={17} style={{ color: supplements.whey_scoops ? 'var(--status-excellent)' : 'var(--text-muted)' }} />
             <span className="text-xs font-semibold">Whey</span>
             <span className="muted text-[10px]">
               {supplements.whey_scoops ? `${supplements.whey_scoops} today` : `adds ${WHEY_PROTEIN_G} g`}
@@ -429,9 +429,9 @@ export default function Nutrition() {
             disabled={!canEdit || busy}
             onClick={() => saveNutrition({ userId: user.id, date, patch: { creatine_taken: !supplements.creatine_taken } })}
             className="flex flex-col items-center gap-1 rounded-xl border px-3 py-3 disabled:opacity-50"
-            style={{ borderColor: supplements.creatine_taken ? '#22c55e' : 'var(--border)', background: supplements.creatine_taken ? '#22c55e14' : 'transparent' }}
+            style={{ borderColor: supplements.creatine_taken ? 'var(--status-excellent)' : 'var(--border)', background: supplements.creatine_taken ? 'color-mix(in srgb, var(--status-excellent) 12%, transparent)' : 'transparent' }}
           >
-            {supplements.creatine_taken ? <Check size={17} style={{ color: '#22c55e' }} /> : <Pill size={17} className="muted" />}
+            {supplements.creatine_taken ? <Check size={17} style={{ color: 'var(--status-excellent)' }} /> : <Pill size={17} className="muted" />}
             <span className="text-xs font-semibold">Creatine</span>
             <span className="muted text-[10px]">{supplements.creatine_taken ? 'taken' : 'not yet'}</span>
           </button>
@@ -461,7 +461,7 @@ export default function Nutrition() {
                       className="w-full rounded-t"
                       style={{
                         height: `${Math.max(6, Math.min(100, (d.protein_g / target.grams) * 100))}%`,
-                        background: d.protein_g >= target.grams * 0.9 ? '#22c55e' : '#f97316',
+                        background: d.protein_g >= target.grams * 0.9 ? 'var(--status-excellent)' : 'var(--status-moderate)',
                       }}
                     />
                   </div>

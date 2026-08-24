@@ -8,10 +8,10 @@ import { summariseSync, timeAgo, sourceLabel } from '../lib/syncStatus';
 import { relativeDay } from '../lib/dates';
 
 const STATES = {
-  live: { icon: CheckCircle2, color: '#22c55e', tone: 'bg-score-excellent/10' },
-  stale: { icon: AlertTriangle, color: '#f97316', tone: 'bg-score-moderate/10' },
-  behind: { icon: AlertTriangle, color: '#f97316', tone: 'bg-score-moderate/10' },
-  empty: { icon: CloudOff, color: '#8494a6', tone: 'bg-black/5 dark:bg-white/5' },
+  live: { icon: CheckCircle2, color: 'var(--status-excellent)', tone: 'bg-score-excellent/10' },
+  stale: { icon: AlertTriangle, color: 'var(--status-moderate)', tone: 'bg-score-moderate/10' },
+  behind: { icon: AlertTriangle, color: 'var(--status-moderate)', tone: 'bg-score-moderate/10' },
+  empty: { icon: CloudOff, color: 'var(--viz-other)', tone: 'bg-black/5 dark:bg-white/5' },
 };
 
 /** Shared summary so both the compact strip and the detail panel agree. */
@@ -64,7 +64,7 @@ export function SyncStrip() {
       {sync.pushWorking ? (
         <span
           className="flex shrink-0 items-center gap-1 rounded-full px-2 py-0.5 text-[10px] font-semibold"
-          style={{ background: '#22c55e1a', color: '#22c55e' }}
+          style={{ background: 'color-mix(in srgb, var(--status-excellent) 12%, transparent)', color: 'var(--status-excellent)' }}
         >
           <Watch size={10} aria-hidden="true" /> Auto
         </span>
@@ -99,7 +99,7 @@ export function SyncPanel() {
           </div>
           <div className="flex justify-between gap-3">
             <dt className="muted">Automatic sync</dt>
-            <dd className="font-semibold" style={{ color: sync.pushWorking ? '#22c55e' : '#f97316' }}>
+            <dd className="font-semibold" style={{ color: sync.pushWorking ? 'var(--status-excellent)' : 'var(--status-moderate)' }}>
               {sync.pushWorking ? 'Working' : 'Not seen recently'}
             </dd>
           </div>

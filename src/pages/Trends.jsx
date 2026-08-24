@@ -1,4 +1,5 @@
 import { useMemo, useState } from 'react';
+import WorkoutMix from '../components/viz/WorkoutMix';
 import {
   LineChart,
   Line,
@@ -24,9 +25,10 @@ import { Card, CardHeader, CardBody, Segmented, EmptyState, Skeleton, Badge } fr
 import ChartTooltip from '../components/ChartTooltip';
 
 const RANGES = [
-  { value: 7, label: '7 days' },
-  { value: 30, label: '30 days' },
-  { value: 90, label: '90 days' },
+  { value: 7, label: 'Week' },
+  { value: 30, label: 'Month' },
+  { value: 90, label: '3M' },
+  { value: 365, label: 'Year' },
 ];
 
 const AXIS = {
@@ -47,7 +49,7 @@ function ChartCard({ title, subtitle, icon, delay, hasData, average, children, e
         icon={icon}
         action={
           average !== null && average !== undefined ? (
-            <Badge color="#38bdf8">avg {average}</Badge>
+            <Badge color="var(--viz-1)">avg {average}</Badge>
           ) : null
         }
       />
@@ -124,6 +126,17 @@ export default function Trends() {
         <Segmented value={range} onChange={setRange} options={RANGES} />
       </div>
 
+      <Card delay={10}>
+        <CardHeader
+          title="Where the training went"
+          subtitle={`Sessions in the last ${range} days`}
+          icon={LineIcon}
+        />
+        <CardBody>
+          <WorkoutMix workouts={workoutLogs} days={range} />
+        </CardBody>
+      </Card>
+
       {!anyData ? (
         <Card>
           <EmptyState
@@ -149,15 +162,15 @@ export default function Trends() {
           <XAxis dataKey="tick" {...AXIS} interval="preserveStartEnd" minTickGap={18} />
           <YAxis domain={[0, 100]} {...AXIS} />
           <Tooltip content={<ChartTooltip labels={{ recovery: 'Recovery' }} />} />
-          <ReferenceLine y={66} stroke="#22c55e" strokeDasharray="3 3" strokeOpacity={0.4} />
-          <ReferenceLine y={33} stroke="#ef4444" strokeDasharray="3 3" strokeOpacity={0.4} />
+          <ReferenceLine y={66} stroke="var(--status-excellent)" strokeDasharray="3 3" strokeOpacity={0.4} />
+          <ReferenceLine y={33} stroke="var(--status-poor)" strokeDasharray="3 3" strokeOpacity={0.4} />
           <Line
             type="monotone"
             dataKey="recovery"
             name="Recovery"
-            stroke="#22c55e"
+            stroke="var(--viz-1)"
             strokeWidth={2.5}
-            dot={{ r: 2.5, strokeWidth: 0, fill: '#22c55e' }}
+            dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--viz-1)' }}
             activeDot={{ r: 5 }}
             connectNulls={false}
             animationDuration={700}
@@ -178,8 +191,8 @@ export default function Trends() {
         <ComposedChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -24 }}>
           <defs>
             <linearGradient id="hrvFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.35} />
-              <stop offset="100%" stopColor="#38bdf8" stopOpacity={0} />
+              <stop offset="0%" stopColor="var(--viz-1)" stopOpacity={0.35} />
+              <stop offset="100%" stopColor="var(--viz-1)" stopOpacity={0} />
             </linearGradient>
           </defs>
           {GRID}
@@ -212,9 +225,9 @@ export default function Trends() {
             type="monotone"
             dataKey="hrv"
             name="HRV"
-            stroke="#38bdf8"
+            stroke="var(--viz-1)"
             strokeWidth={2.5}
-            dot={{ r: 2.5, strokeWidth: 0, fill: '#38bdf8' }}
+            dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--viz-1)' }}
             activeDot={{ r: 5 }}
             connectNulls={false}
           />
@@ -243,9 +256,9 @@ export default function Trends() {
             type="monotone"
             dataKey="resting_hr"
             name="Resting HR"
-            stroke="#ef4444"
+            stroke="var(--viz-2)"
             strokeWidth={2.5}
-            dot={{ r: 2.5, strokeWidth: 0, fill: '#ef4444' }}
+            dot={{ r: 2.5, strokeWidth: 0, fill: 'var(--viz-2)' }}
             activeDot={{ r: 5 }}
             connectNulls={false}
           />
@@ -275,7 +288,7 @@ export default function Trends() {
               />
             }
           />
-          <ReferenceLine y={8} stroke="#22c55e" strokeDasharray="3 3" strokeOpacity={0.5} />
+          <ReferenceLine y={8} stroke="var(--status-excellent)" strokeDasharray="3 3" strokeOpacity={0.5} />
           <Bar dataKey="sleep_hours" name="Sleep" radius={[3, 3, 0, 0]} maxBarSize={18}>
             {data.map((entry) => (
               <Cell
@@ -299,8 +312,8 @@ export default function Trends() {
         <ComposedChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -24 }}>
           <defs>
             <linearGradient id="exertionFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#a855f7" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="#a855f7" stopOpacity={0.02} />
+              <stop offset="0%" stopColor="var(--viz-2)" stopOpacity={0.4} />
+              <stop offset="100%" stopColor="var(--viz-2)" stopOpacity={0.02} />
             </linearGradient>
           </defs>
           {GRID}
@@ -316,7 +329,7 @@ export default function Trends() {
             type="monotone"
             dataKey="exertion"
             name="Exertion"
-            stroke="#a855f7"
+            stroke="var(--viz-4)"
             strokeWidth={2}
             fill="url(#exertionFill)"
             connectNulls={false}
@@ -325,7 +338,7 @@ export default function Trends() {
             type="monotone"
             dataKey="recovery"
             name="Recovery"
-            stroke="#22c55e"
+            stroke="var(--viz-1)"
             strokeWidth={2.5}
             dot={false}
             activeDot={{ r: 5 }}
@@ -347,8 +360,8 @@ export default function Trends() {
         <ComposedChart data={data} margin={{ top: 6, right: 8, bottom: 0, left: -24 }}>
           <defs>
             <linearGradient id="readyFill" x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor="#38bdf8" stopOpacity={0.4} />
-              <stop offset="100%" stopColor="#38bdf8" stopOpacity={0.02} />
+              <stop offset="0%" stopColor="var(--viz-1)" stopOpacity={0.4} />
+              <stop offset="100%" stopColor="var(--viz-1)" stopOpacity={0.02} />
             </linearGradient>
           </defs>
           {GRID}
@@ -359,7 +372,7 @@ export default function Trends() {
             type="monotone"
             dataKey="readiness"
             name="Readiness"
-            stroke="#38bdf8"
+            stroke="var(--viz-1)"
             strokeWidth={2.5}
             fill="url(#readyFill)"
             connectNulls={false}
@@ -401,7 +414,7 @@ export default function Trends() {
             yAxisId="left"
             dataKey="steps"
             name="Steps"
-            fill="#38bdf8"
+            fill="var(--viz-1)"
             fillOpacity={0.45}
             radius={[3, 3, 0, 0]}
             maxBarSize={16}
@@ -411,7 +424,7 @@ export default function Trends() {
             type="monotone"
             dataKey="active_calories"
             name="Active kcal"
-            stroke="#f97316"
+            stroke="var(--viz-4)"
             strokeWidth={2.5}
             dot={false}
             connectNulls={false}

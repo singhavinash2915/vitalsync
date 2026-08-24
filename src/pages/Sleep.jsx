@@ -29,6 +29,8 @@ import {
   EmptyState,
   Skeleton,
 } from '../components/ui';
+import SleepRegularity from '../components/viz/SleepRegularity';
+
 import EditGate, { useCanEdit } from '../components/EditGate';
 import ChartTooltip from '../components/ChartTooltip';
 import SleepStages from '../components/SleepStages';
@@ -161,6 +163,18 @@ export default function Sleep() {
 
       <SleepStages night={existing} />
 
+
+      {/*
+        When sleep happened, not just how much. Renders nothing until bedtime
+        and wake are present — those were null on every night until the parser
+        stopped discarding each record's start and end.
+      */}
+      <Card delay={20}>
+        <CardHeader title="Sleep regularity" subtitle="Last 7 nights, 6pm to noon" icon={Moon} />
+        <CardBody>
+          <SleepRegularity sleep={sleep} nights={7} />
+        </CardBody>
+      </Card>
       <Card delay={60}>
         <CardHeader title="Log sleep" subtitle="Last night, or any past night" icon={BedDouble} />
         <CardBody>
