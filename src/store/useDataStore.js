@@ -441,6 +441,36 @@ export const useDataStore = create((set, get) => ({
     return { ok: true };
   },
 
+  /**
+   * Records what today's gym session was for.
+   *
+   * Lives on the journal row because that is already the per-day record of
+   * things the watch cannot know. Merged rather than replaced, so setting a
+   * focus never wipes a soreness or knee rating logged earlier.
+   */
+  setTrainingFocus: async ({ userId, date, focus }) => {
+    if (!canEdit()) return READ_ONLY;
+
+    const existing = get().journal.find((r) => r.date === date) ?? {};
+    const row = { ...existing, user_id: userId, date, training_focus: focus };
+    delete row.id;
+    delete row.created_at;
+    delete row.updated_at;
+
+    const { data, error } = await supabase
+      .from('journal_logs')
+      .upsert(row, { onConflict: 'user_id,date' })
+      .select()
+      .single();
+
+    if (error) return { ok: false, message: describeError(error, 'Could not save that.') };
+
+    set((state) => ({
+      journal: [data, ...state.journal.filter((r) => r.date !== date)].sort(byDateDesc),
+    }));
+    return { ok: true, data };
+  },
+
   /** Upserts today's nutrition row. Partial patches are merged, not replaced. */
   saveNutrition: async ({ userId, date, patch }) => {
     if (!canEdit()) return READ_ONLY;

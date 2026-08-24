@@ -57,8 +57,10 @@ function plannedLifts(session) {
  * because those are the ones likely to recur, and anything missing can still be
  * typed — the catalogue should never be a wall.
  */
-function ExercisePicker({ open, onClose, onPick, history }) {
-  const [part, setPart] = useState(null);
+function ExercisePicker({ open, onClose, onPick, history, initialPart = null }) {
+  // Opens straight into the declared body part — having already said "chest",
+  // being asked "what did you train?" again is a wasted tap.
+  const [part, setPart] = useState(initialPart);
   const [custom, setCustom] = useState('');
 
   const known = new Set(history.map((h) => h.exercise.toLowerCase()));
@@ -212,8 +214,10 @@ function SetForm({ open, onClose, onSave, exercise, lastSession, suggestion }) {
 }
 
 export default function Strength() {
-  const { strengthSets, workouts, plan, scores, health, meals, bodyComposition, addStrengthSet, deleteStrengthSet } =
-    useDataStore();
+  const {
+    strengthSets, workouts, plan, scores, health, meals, bodyComposition, journal,
+    addStrengthSet, deleteStrengthSet, setTrainingFocus,
+  } = useDataStore();
   const { user, profile } = useAuthStore();
   const canEdit = useCanEdit();
   const { findings } = useFindings();
@@ -243,6 +247,8 @@ export default function Strength() {
     [ordered, plan, findings, profile, health]
   );
 
+  const focus = journal.find((r) => r.date === date)?.training_focus ?? null;
+
   const logged = useMemo(() => setsForDate(strengthSets, date), [strengthSets, date]);
   const volume = useMemo(() => weeklyVolume(strengthSets), [strengthSets]);
 
@@ -262,7 +268,19 @@ export default function Strength() {
     [strengthSets, meals, scores, target.grams]
   );
   const loggedNames = new Set(logged.map((g) => g.exercise.toLowerCase()));
-  const suggestions = plannedLifts(prescription).filter((n) => !loggedNames.has(n.toLowerCase()));
+  const planned = plannedLifts(prescription).filter((n) => !loggedNames.has(n.toLowerCase()));
+
+  /*
+   * With a focus declared, offer that body part's lifts first. The plan's own
+   * session still shows, because the programme is the programme — but if you
+   * have said "chest", the chest movements should not be three taps away.
+   */
+  const suggestions = focus
+    ? [
+        ...exercisesForPart(focus).map((e) => e.name).filter((n) => !loggedNames.has(n.toLowerCase())),
+        ...planned,
+      ].slice(0, 10)
+    : planned;
   const history = useMemo(() => exerciseList(strengthSets), [strengthSets]);
 
   const save = async (entry) => {
@@ -281,6 +299,35 @@ export default function Strength() {
       <EditGate />
 
       <Card delay={0}>
+        <CardHeader
+          title="What are you training?"
+          subtitle={focus ? `Today is ${focus}` : 'Pick one and the list below narrows to it'}
+          icon={Dumbbell}
+        />
+        <CardBody className="flex flex-wrap gap-1.5">
+          {BODY_PARTS.map((b) => {
+            const active = b.key === focus;
+            return (
+              <button
+                key={b.key}
+                disabled={!canEdit}
+                onClick={() => setTrainingFocus({ userId: user.id, date, focus: active ? null : b.key })}
+                className="flex items-center gap-1.5 rounded-full border px-3 py-1.5 text-[11px] font-medium transition-colors disabled:opacity-50"
+                style={{
+                  borderColor: active ? 'var(--viz-1)' : 'var(--border)',
+                  background: active ? 'color-mix(in srgb, var(--viz-1) 14%, transparent)' : 'transparent',
+                  color: active ? 'var(--viz-1)' : undefined,
+                }}
+              >
+                <span aria-hidden="true">{b.emoji}</span>
+                {b.label}
+              </button>
+            );
+          })}
+        </CardBody>
+      </Card>
+
+      <Card delay={20}>
         <CardHeader
           title={prescription.title}
           subtitle={prettyDate(date)}
@@ -466,6 +513,7 @@ export default function Strength() {
         onClose={() => setPicking(false)}
         onPick={(name) => { setPicking(false); setActive(name); }}
         history={history}
+        initialPart={focus}
       />
 
       <SetForm

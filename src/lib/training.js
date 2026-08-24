@@ -382,6 +382,7 @@ export function heroAdvice({
   loadSoFar = null,
   illness = null,
   profile = null,
+  focus = null,
   now = new Date(),
 } = {}) {
   const session = sessionFor(plan, now);
@@ -398,7 +399,9 @@ export function heroAdvice({
   const done = workoutsToday.filter((w) => Number(w.duration_mins) > 0);
   if (done.length) {
     const mins = done.reduce((sum, w) => sum + Number(w.duration_mins ?? 0), 0);
-    const kinds = [...new Set(done.map((w) => w.type).filter(Boolean))].join(' and ');
+    // A declared focus beats the watch's generic label: "chest" says more than
+    // "strength", and it is the thing that decides what tomorrow should avoid.
+    const kinds = focus || [...new Set(done.map((w) => w.type).filter(Boolean))].join(' and ');
     const spent = Number.isFinite(Number(loadSoFar)) ? Number(loadSoFar) : null;
 
     if (spent !== null && readiness !== null && spent > readiness + 15) {
@@ -416,7 +419,7 @@ export function heroAdvice({
 
   // 4. A session is ahead. Say which, and what it should look like.
   const limits = activeLimits(profile);
-  const noun = activity === 'cricket' ? 'match' : 'gym session';
+  const noun = activity === 'cricket' ? 'match' : focus ? `${focus} session` : 'gym session';
   const when = hour < 11 ? 'this morning' : hour < 16 ? 'today' : 'this evening';
 
   const shape = {
@@ -430,9 +433,14 @@ export function heroAdvice({
   // Pointless on a session that is not happening — "skip it, and by the way no
   // jumps" is advice about a workout nobody is doing.
   const skipping = band === 'critical' || (readiness !== null && readiness < 25);
+
+  // The knee only comes up when the session could actually load it. Telling
+  // someone on a chest day that jumps stay out is noise, and noise is how a
+  // warning stops being read.
+  const lowerBody = !focus || ['legs', 'full body', 'cardio'].includes(focus);
   const kneeNote = skipping
     ? ''
-    : limits.includes('no_plyometrics') && activity === 'gym'
+    : limits.includes('no_plyometrics') && activity === 'gym' && lowerBody
       ? ' Jumps stay out.'
       : limits.includes('no_sprinting') && activity === 'cricket'
         ? ' No full run-up.'

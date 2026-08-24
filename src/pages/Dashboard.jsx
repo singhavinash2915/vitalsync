@@ -37,7 +37,6 @@ import { Sparkline, TrendDelta } from '../components/Sparkline';
 import ScoreDetailSheet from '../components/ScoreDetailSheet';
 import ReadinessToday from '../components/ReadinessToday';
 import ReadinessWeek from '../components/ReadinessWeek';
-import TodaySession from '../components/TodaySession';
 
 /**
  * A metric tile that interprets rather than just reports: the value, how it
@@ -211,6 +210,7 @@ export default function Dashboard() {
     loadSoFar: computed?.exertion_score,
     illness: detectIllnessSignal(health),
     profile,
+    focus: journalLogs.find((r) => r.date === todayKey())?.training_focus ?? null,
     now: new Date(),
   });
   const firstName = profile?.name?.split(' ')[0];
@@ -314,14 +314,6 @@ export default function Dashboard() {
           <RecoveryTrend days={14} />
         </CardBody>
       </Card>
-
-      {/*
-        The score, then the week it sits in, then what to do about it. Today's
-        number means little without the week behind it — a 22 after a run of
-        50s is a different morning from the third 22 in a row — so the verdict
-        reads better once both are already on screen.
-      */}
-      <TodaySession computed={computed} health={dayHealth} sleep={daySleep} />
 
       {/* Only renders once a day has two or more synced snapshots. */}
       <ReadinessToday />
