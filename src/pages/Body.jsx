@@ -10,6 +10,7 @@ import { proteinSummary, proteinTarget } from '../lib/nutrition';
 import { toNumber } from '../lib/scores';
 import { todayKey, shortDate, prettyDate } from '../lib/dates';
 import EditGate, { useCanEdit } from '../components/EditGate';
+import ScanDetail from '../components/viz/ScanDetail';
 import { Card, CardHeader, CardBody, Button, Input, Field, Modal, EmptyState, Badge } from '../components/ui';
 
 /**
@@ -253,6 +254,31 @@ export default function Body() {
           </CardBody>
         </Card>
       ) : null}
+
+      {/*
+        Every reading explained, with its band drawn and — once a second scan
+        exists — the change beside it. The printout gives fifteen numbers and
+        explains none of them.
+      */}
+      <Card delay={70}>
+        <CardHeader
+          title="Your readings, explained"
+          subtitle={
+            bodyComposition.length > 1
+              ? `${prettyDate(last.date)}, against the scan before it`
+              : `${prettyDate(last.date)} · tap any row`
+          }
+          icon={Info}
+        />
+        <CardBody>
+          <ScanDetail
+            scan={last}
+            previous={
+              [...bodyComposition].sort((a, b) => (a.date < b.date ? 1 : -1))[1] ?? null
+            }
+          />
+        </CardBody>
+      </Card>
 
       <Card delay={80}>
         <CardHeader
