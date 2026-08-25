@@ -4,6 +4,7 @@ import { sessionFor, ageFrom } from './training';
 import { detectIllnessSignal } from './illness';
 import { suggestNextLoad } from './strength';
 import { activeLimits, applyLimitsToBlocks, cricketLimitNote, LIMITS } from './limits';
+import { sessionFromProgramme, toBlocks, RECOVERY } from './programme';
 
 /**
  * The trainer. Where `training.js` says how hard to go, this says what to do.
@@ -27,90 +28,13 @@ const CRICKET_DEMANDS = {
 };
 
 /**
- * A six-day block built around a cricket all-rounder rather than a bodybuilder:
- * hinge and squat strength for the base, throwing-shoulder and thoracic work to
- * keep the bowling action healthy, rotational power for bat and ball, and one
- * genuinely aerobic day so sixteen overs in the field is not the hardest thing
- * the body does that week.
+ * The gym week no longer lives here. It is the coach's 12-week programme, in
+ * `programme.js`, and the templates that used to sit at this spot were mine —
+ * built for a cricket all-rounder rather than for body recomposition. An app
+ * that argues with the person's actual coach is worse than one that says
+ * nothing, so what this file does now is scale the coach's session to the
+ * morning's reading, not choose a different one.
  */
-const GYM_DAYS = {
-  1: {
-    role: 'Lower strength',
-    focus: 'The base everything else is built on',
-    blocks: [
-      { name: 'Prime', items: ['5 min bike or skip', 'Leg swings, hip 90/90, ankle rocks'] },
-      {
-        name: 'Main',
-        items: ['Back squat 4×5 @ RPE 7', 'Romanian deadlift 3×8', 'Walking lunge 3×10 each leg'],
-      },
-      { name: 'Support', items: ['Copenhagen plank 3×20s each side', 'Calf raise 3×12'] },
-      { name: 'Finish', items: ['Dead bug 3×10 each side'] },
-    ],
-  },
-  2: {
-    role: 'Upper push + bowling shoulder',
-    focus: 'Keeping the bowling arm durable, not just strong',
-    blocks: [
-      { name: 'Prime', items: ['Band pull-apart 2×15', 'Wall slides 2×10'] },
-      { name: 'Main', items: ['Bench press 4×6 @ RPE 7', 'Half-kneeling landmine press 3×8 each'] },
-      {
-        name: 'Support',
-        items: ['Cable external rotation 3×12 each', 'Serratus wall slide 3×10', 'Face pull 3×15'],
-      },
-      { name: 'Finish', items: ['Thoracic rotation 2×8 each side'] },
-    ],
-  },
-  3: {
-    role: 'Conditioning + rotational power',
-    focus: 'The engine for sixteen overs in the field',
-    blocks: [
-      { name: 'Prime', items: ['400m easy jog', 'A-skips, high knees, heel flicks'] },
-      {
-        name: 'Main',
-        items: ['6 × 40m stride at 80%, walk back', 'Med-ball rotational throw 4×5 each side'],
-      },
-      { name: 'Support', items: ['Pallof press 3×12 each', 'Side plank with reach 3×8 each'] },
-      { name: 'Finish', items: ['5 min easy spin'] },
-    ],
-  },
-  4: {
-    role: 'Lower power',
-    focus: 'Speed between the wickets and braking force in the delivery stride',
-    blocks: [
-      { name: 'Prime', items: ['5 min bike', 'Pogo hops 3×10'] },
-      { name: 'Main', items: ['Trap-bar jump 5×3', 'Split squat 3×8 each', 'Nordic curl 3×5'] },
-      { name: 'Support', items: ['Single-leg calf raise 3×12 each', 'Hip airplane 2×6 each'] },
-      { name: 'Finish', items: ['Ankle mobility 2 min'] },
-    ],
-  },
-  5: {
-    role: 'Upper pull',
-    focus: 'The back half of the shoulder, which is what saves the front half',
-    blocks: [
-      { name: 'Prime', items: ['Scap pull-up 2×8', 'Band dislocate 2×10'] },
-      { name: 'Main', items: ['Weighted pull-up 4×5', 'Chest-supported row 3×10'] },
-      { name: 'Support', items: ['Prone Y-T-W 3×8 each', 'Farmer carry 3×40m'] },
-      { name: 'Finish', items: ['Hang from bar 3×20s'] },
-    ],
-  },
-  6: {
-    role: 'Full body + cricket skill',
-    focus: 'Tie it together while it is still fresh from the week',
-    blocks: [
-      { name: 'Prime', items: ['Full dynamic warm-up, 8 min'] },
-      { name: 'Main', items: ['Deadlift 3×5 @ RPE 7', 'Overhead press 3×8', 'Chin-up 3×max-2'] },
-      { name: 'Skill', items: ['Shadow batting 10 min', 'Run-up rhythm without ball, 10 reps'] },
-      { name: 'Finish', items: ['10 min easy walk'] },
-    ],
-  },
-  0: {
-    role: 'Optional easy day',
-    focus: 'Movement, not training',
-    blocks: [
-      { name: 'Move', items: ['30–40 min walk, or an easy swim', 'Full-body mobility 10 min'] },
-    ],
-  },
-};
 
 /**
  * How the written session survives contact with the morning's reading.
@@ -253,7 +177,7 @@ export function prescribeSession({
       blocks:
         band === 'critical'
           ? [{ name: 'Today', items: ['Nothing structured', 'Eat properly, get to bed early'] }]
-          : [{ name: 'Optional', items: GYM_DAYS[0].blocks[0].items }],
+          : [{ name: 'Optional', items: toBlocks(RECOVERY)[0].items }],
       rationale:
         band === 'critical'
           ? 'A reading this low on a day you have not trained is not training fatigue. Look at sleep, illness and stress before you look at your programme.'
@@ -305,24 +229,26 @@ export function prescribeSession({
   }
 
   // --- gym ------------------------------------------------------------------
-  const dow = new Date(`${date}T12:00:00`).getDay();
-  const template = GYM_DAYS[dow] ?? GYM_DAYS[6];
-  let blocks = template.blocks;
+  const when = new Date(`${date}T12:00:00`);
+  const template = sessionFromProgramme(plan, when) ?? RECOVERY;
+  let blocks = toBlocks(template);
 
   if (scale.volume === 0) {
     blocks = [{ name: 'Instead of the session', items: ['20–30 min easy walk', 'Mobility, 10 min'] }];
   } else if (scale.volume <= 0.5) {
-    blocks = blocks.filter((b) => ['Prime', 'Main', 'Move'].includes(b.name));
-  } else if (scale.volume <= 0.7) {
-    blocks = blocks.filter((b) => b.name !== 'Finish');
+    // The lifting gets halved, but the walk stays. Cardio is the fat-loss half
+    // of this programme and it costs almost nothing to recover from — cutting
+    // it on a bad morning would trade the wrong thing away.
+    blocks = blocks
+      .filter((b) => b.name !== 'Cardio')
+      .concat([{ name: 'Cardio', items: ['Easy walk, 10 min — keep it conversational'] }]);
   }
 
   // Legs the day before a match is the one swap worth making unprompted.
-  const heavyLower = /Lower/.test(template.role);
-  if (ahead?.inDays === 1 && heavyLower && scale.volume > 0) {
+  if (ahead?.inDays === 1 && template.part === 'legs' && scale.volume > 0) {
     notes.push({
       tone: 'warn',
-      text: 'You have a match tomorrow and today is a lower-body day. Keep the main lift but halve the sets — dead legs cost you more between the wickets than the session buys you.',
+      text: 'You have a match tomorrow and today is a leg day. Keep the main lift but halve the sets — dead legs cost you more between the wickets than the session buys you.',
     });
   }
 
@@ -343,7 +269,7 @@ export function prescribeSession({
     // Both describe work that is not happening today, so neither belongs on a
     // card that is telling him not to train.
     focus: skipping ? null : template.focus,
-    duration: skipping ? null : Math.round(75 * scale.volume),
+    duration: skipping ? null : Math.round(60 * scale.volume),
     skipped: skipping,
     blocks,
     rationale:
@@ -440,7 +366,7 @@ export function coachContext({ health = [], sleep = [], scores = [], findings = 
   };
 }
 
-export { GYM_DAYS, SCALING, CRICKET_OVERS };
+export { SCALING, CRICKET_OVERS };
 
 
 /**

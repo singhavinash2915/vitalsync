@@ -133,18 +133,26 @@ export function setsForDate(sets = [], date) {
 
 
 /**
- * What to put on the bar next time.
+ * What to put on the bar next time — double progression.
  *
- * Double progression, decided by how the last session actually felt rather
- * than by the calendar: if every working set was completed at RPE 7 or easier,
- * the weight goes up; if it was a grind or reps were missed, it holds or comes
- * down. Lower-body lifts move in bigger steps because 2.5 kg on a deadlift is
- * inside the noise.
+ * The coach's rule, and it replaces the RPE-based one this used to run. Weight
+ * is held until every working set reaches the TOP of its rep range; only then
+ * does it go up, and the reps reset to the bottom. His own worked example:
  *
- * Returned as a suggestion, never auto-filled — the lifter is standing there
- * and knows things the log does not.
+ *   10 kg for 10, 9, 8   → stay at 10 kg, chase the missing reps
+ *   10 kg for 10, 10, 10 → add weight, start again around 8, 8, 8
+ *
+ * Why this rather than effort: a rep range is observed, an RPE is reported.
+ * Double progression cannot be gamed by a generous self-rating on a hard day,
+ * and it is what the person is actually being coached to do — an app arguing
+ * with the coach is worse than an app that stays quiet.
+ *
+ * RPE has not gone away; it now answers a different question. The coach wants
+ * roughly one to three reps left in the tank, so a run of "Grind" answers is
+ * the signal that a weight went up too early, reported separately by
+ * `effortWarning` below.
  */
-export function suggestNextLoad(sets = [], exercise) {
+export function suggestNextLoad(sets = [], exercise, repRange = null) {
   const sessions = sessionsFor(sets, exercise);
   if (!sessions.length) return null;
 
@@ -153,44 +161,65 @@ export function suggestNextLoad(sets = [], exercise) {
   if (!working.length) return null;
 
   const load = Math.max(...working.map((x) => toNumber(x.weight_kg)));
-  const topReps = Math.max(...working.map((x) => toNumber(x.reps)));
-  const rpes = working.filter((x) => hasNumber(x.rpe)).map((x) => toNumber(x.rpe));
-  const hardest = rpes.length ? Math.max(...rpes) : null;
+  // Only sets at the working weight count — a lighter back-off set is not a
+  // failed attempt at the top of the range.
+  const atLoad = working.filter((x) => toNumber(x.weight_kg) === load);
+  const reps = atLoad.map((x) => toNumber(x.reps));
+  const lowest = Math.min(...reps);
   const step = isLowerBody(exercise) ? 5 : 2.5;
 
-  // With no RPE logged there is nothing to judge effort by, so the honest
-  // suggestion is to repeat and record how it felt.
-  if (hardest === null) {
+  // Without a prescribed range there is nothing to progress against, so fall
+  // back to reporting what was done rather than inventing a target.
+  if (!repRange) {
     return {
       weight: load,
-      reps: topReps,
+      reps: Math.max(...reps),
       change: 0,
-      reason: `Repeat ${load} kg and log an RPE — without one there is no way to tell whether it was easy.`,
+      reason: `Last time ${load} kg for ${reps.join(', ')}. No rep range set for this lift, so repeat and see.`,
     };
   }
 
-  if (hardest <= 7) {
+  const [min, max] = repRange;
+  const clearedTop = reps.length >= 1 && lowest >= max;
+
+  if (clearedTop) {
     return {
       weight: load + step,
-      reps: topReps,
+      reps: min,
       change: step,
-      reason: `Last session topped out at RPE ${hardest}, so there was room. Add ${step} kg.`,
+      reason: `Every set reached ${max} at ${load} kg, so the range is done. Add ${step} kg and start again around ${min}.`,
     };
   }
-  if (hardest <= 8.5) {
-    return {
-      weight: load,
-      reps: topReps + 1,
-      change: 0,
-      reason: `RPE ${hardest} is about right. Hold ${load} kg and chase an extra rep before adding weight.`,
-    };
-  }
+
   return {
-    weight: Math.max(0, load - step),
-    reps: topReps,
-    change: -step,
-    reason: `RPE ${hardest} was a grind. Drop ${step} kg and rebuild — a stalled lift costs more than a light week.`,
+    weight: load,
+    reps: Math.min(max, lowest + 1),
+    change: 0,
+    reason: `Last time ${reps.join(', ')} at ${load} kg. Same weight — the weight goes up when every set reaches ${max}.`,
   };
+}
+
+/**
+ * Whether the effort ratings say the weight went up too soon.
+ *
+ * Separate from the load rule on purpose. The coach's target is one to three
+ * reps left in the tank, which is RPE 7 to 9; a run of harder answers than that
+ * means the last increase was premature, and that is worth saying before the
+ * lift stalls rather than after.
+ */
+export function effortWarning(sets = [], exercise, sessionsToCheck = 2) {
+  const sessions = sessionsFor(sets, exercise).slice(-sessionsToCheck);
+  if (sessions.length < sessionsToCheck) return null;
+
+  const graded = sessions.map((s) =>
+    s.sets.filter((x) => !x.is_warmup && hasNumber(x.rpe)).map((x) => toNumber(x.rpe))
+  );
+  if (graded.some((g) => !g.length)) return null;
+
+  const allGrinding = graded.every((g) => Math.max(...g) >= 9);
+  if (!allGrinding) return null;
+
+  return `Every set has been a grind for ${sessionsToCheck} sessions. That is past the one-to-three-reps-in-reserve the plan asks for — take 5% off and rebuild rather than waiting for it to stall.`;
 }
 
 /**

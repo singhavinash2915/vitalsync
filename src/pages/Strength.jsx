@@ -15,10 +15,12 @@ import {
   exerciseList,
   estimateOneRepMax,
   suggestNextLoad,
+  effortWarning,
   detectStall,
   weeklyVolume,
 } from '../lib/strength';
 import { BODY_PARTS, exercisesForPart } from '../lib/exercises';
+import { rangeForExercise } from '../lib/programme';
 import { proteinTarget } from '../lib/nutrition';
 import { latestScan } from '../lib/body';
 import { toNumber } from '../lib/scores';
@@ -27,9 +29,12 @@ import EditGate, { useCanEdit } from '../components/EditGate';
 import { Card, CardHeader, CardBody, Button, Input, Field, Modal, Badge } from '../components/ui';
 
 /**
- * The three answers people will actually give, mapped onto the RPE scale the
- * progression logic already speaks. 6 earns weight, 8 holds and chases a rep,
- * 9.5 backs off — the thresholds in suggestNextLoad, unchanged.
+ * The three answers people will actually give, mapped onto the RPE scale.
+ *
+ * These no longer decide the load — double progression does that off the rep
+ * range. Effort answers a different question now: the programme asks for one to
+ * three reps left in the tank, so "Right" is the target and a run of "Grind"
+ * means a weight went up too early. See `effortWarning`.
  */
 const RPE_CHOICES = [
   { value: 6, label: 'Easy', hint: 'reps left over', color: 'var(--status-excellent)' },
@@ -158,7 +163,7 @@ function ExercisePicker({ open, onClose, onPick, history, initialPart = null }) 
   );
 }
 
-function SetForm({ open, onClose, onSave, exercise, lastSession, suggestion }) {
+function SetForm({ open, onClose, onSave, exercise, lastSession, suggestion, effortNote }) {
   const [reps, setReps] = useState('');
   const [weight, setWeight] = useState('');
   const [rpe, setRpe] = useState('');
@@ -207,6 +212,13 @@ function SetForm({ open, onClose, onSave, exercise, lastSession, suggestion }) {
             {suggestion.change ? ` (${suggestion.change > 0 ? '+' : ''}${suggestion.change} kg)` : ''}
             <span className="block opacity-80">{suggestion.reason} Tap to use.</span>
           </button>
+        ) : null}
+
+        {effortNote ? (
+          <p className="rounded-xl px-2.5 py-2 text-[11px] leading-relaxed"
+             style={{ background: 'color-mix(in srgb, var(--status-moderate) 12%, transparent)', color: 'var(--status-moderate)' }}>
+            {effortNote}
+          </p>
         ) : null}
         <div className="grid grid-cols-2 gap-2">
           <Field label="Weight">
@@ -561,7 +573,8 @@ export default function Strength() {
         onSave={save}
         exercise={active}
         lastSession={active ? progressFor(strengthSets, active)?.last : null}
-        suggestion={active ? suggestNextLoad(strengthSets, active) : null}
+        suggestion={active ? suggestNextLoad(strengthSets, active, rangeForExercise(active)) : null}
+        effortNote={active ? effortWarning(strengthSets, active) : null}
       />
     </div>
   );

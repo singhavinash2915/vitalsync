@@ -1,5 +1,5 @@
 import { useMemo } from 'react';
-import { CalendarCheck, Target } from 'lucide-react';
+import { CalendarCheck, ClipboardList, Target } from 'lucide-react';
 
 import { useDataStore } from '../store/useDataStore';
 import { useAuthStore } from '../store/useAuthStore';
@@ -35,7 +35,20 @@ export default function WeeklyReview() {
           : `${review.readiness.delta > 0 ? '+' : ''}${review.readiness.delta} vs last week`,
       color: 'var(--viz-1)',
     },
-    { label: 'Sleep', value: review.sleep?.value ?? null, suffix: 'h', color: 'var(--viz-3)' },
+    {
+      label: 'Sleep',
+      value: review.sleep?.value ?? null,
+      suffix: 'h',
+      note: review.sleep ? `target ${review.sleep.target}` : null,
+      color: 'var(--viz-3)',
+    },
+    {
+      label: 'Steps',
+      value: review.steps ? Math.round(review.steps.value / 100) / 10 : null,
+      suffix: 'k',
+      note: review.steps ? `target ${Math.round(review.steps.target / 1000)}k` : null,
+      color: 'var(--viz-2)',
+    },
     {
       label: 'Protein',
       value: review.protein.average,
@@ -48,7 +61,7 @@ export default function WeeklyReview() {
       value: review.sessions,
       suffix: '',
       note: review.strengthSets ? `${review.strengthSets} sets` : null,
-      color: 'var(--viz-2)',
+      color: 'var(--viz-1)',
     },
   ];
 
@@ -60,7 +73,7 @@ export default function WeeklyReview() {
         icon={CalendarCheck}
       />
       <CardBody className="space-y-3">
-        <div className="grid grid-cols-4 gap-1.5">
+        <div className="grid grid-cols-3 gap-1.5 sm:grid-cols-5">
           {stats.map((s) => (
             <div key={s.label} className="rounded-xl px-1 py-2 text-center" style={{ background: 'var(--bg-sunken)' }}>
               <p className="text-base font-bold tabular-nums" style={{ color: s.value === null ? 'var(--text-muted)' : s.color }}>
@@ -93,6 +106,23 @@ export default function WeeklyReview() {
                 </span>
               ))}
             </div>
+          </div>
+        ) : null}
+
+        {review.checkIn ? (
+          <div
+            className="flex items-start gap-2 rounded-xl px-2.5 py-2"
+            style={{
+              background: `color-mix(in srgb, var(--status-${review.checkIn.done ? 'excellent' : 'good'}) 12%, transparent)`,
+            }}
+          >
+            <ClipboardList
+              size={13}
+              className="mt-px shrink-0"
+              style={{ color: `var(--status-${review.checkIn.done ? 'excellent' : 'good'})` }}
+              aria-hidden="true"
+            />
+            <p className="text-[11px] leading-relaxed">{review.checkIn.text}</p>
           </div>
         ) : null}
 

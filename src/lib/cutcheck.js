@@ -75,10 +75,65 @@ export function cutCheck({ scans = [], sets = [], proteinAverage = null, protein
   const holding = strength.direction !== 'down';
 
   const pct = (v) => `${v > 0 ? '+' : ''}${v.toFixed(1)}`;
-  const evidence = `Strength ${pct(strength.changePct)}% across ${strength.lifts.length} lift${strength.lifts.length > 1 ? 's' : ''}, fat mass ${pct(fatChange ?? 0)} kg over ${body.weeks} weeks.`;
-
   const underEating =
     proteinAverage !== null && proteinTarget && proteinAverage < proteinTarget * 0.85;
+
+  /*
+   * The coach's rule, and it runs before the scan-based ones because it is
+   * better evidence than they are.
+   *
+   * Waist falling + strength holding or rising = recomposition is working,
+   * whatever the scale says. Body weight is the noisiest of the three signals
+   * — water, food volume and glycogen move it by a kilo inside a day — and it
+   * is also the one most likely to sit flat during exactly the period when
+   * muscle is being gained and fat lost at similar rates. A tape measure has
+   * none of that noise, which is why he asks for it weekly and calls it the
+   * most important indicator.
+   *
+   * This also means a verdict is available every week rather than only when
+   * there is a fresh InBody scan.
+   */
+  const waist = body.waist;
+  if (waist?.falling && holding) {
+    const weightNote =
+      body.perWeek === null
+        ? ''
+        : body.perWeek < -0.15
+          ? ` Weight is drifting down about ${Math.abs(body.perWeek).toFixed(2)} kg a week, which is the right speed.`
+          : body.perWeek > 0.15
+            ? ' The scale is up, which at a shrinking waist is muscle, not a problem.'
+            : ' The scale is flat, which at a shrinking waist means you are swapping fat for muscle.';
+    return {
+      verdict: 'working',
+      tone: 'good',
+      headline: 'Recomposition is working',
+      basis: 'waist',
+      detail: `Waist down ${Math.abs(waist.change).toFixed(1)} cm over ${waist.weeks} weeks with strength ${pct(strength.changePct)}%.${weightNote} Keep going.`,
+      body,
+      strength,
+    };
+  }
+  const evidence = `Strength ${pct(strength.changePct)}% across ${strength.lifts.length} lift${strength.lifts.length > 1 ? 's' : ''}, fat mass ${pct(fatChange ?? 0)} kg over ${body.weeks} weeks.`;
+
+  /*
+   * The warning half of the same rule.
+   *
+   * A shrinking waist is only good news while the lifts hold. Falling waist
+   * with falling strength is fat and muscle going together, and staying quiet
+   * about it until the next InBody scan would mean saying nothing during
+   * exactly the weeks it is happening.
+   */
+  if (waist?.falling && !holding) {
+    return {
+      verdict: 'losing-muscle',
+      tone: 'bad',
+      headline: 'Losing muscle along with the fat',
+      basis: 'waist',
+      detail: `Waist is down ${Math.abs(waist.change).toFixed(1)} cm, but strength is ${pct(strength.changePct)}% across ${strength.lifts.length} lift${strength.lifts.length > 1 ? 's' : ''}. That is the wrong kind of loss.${underEating ? ` Protein is averaging ${Math.round(proteinAverage)} g against a ${proteinTarget} g target, which is the first thing to fix.` : ' Protein looks adequate, so the deficit is probably too steep — take it to about half a kilo a week.'}`,
+      body,
+      strength,
+    };
+  }
 
   if (holding && fatFalling) {
     return {
@@ -101,6 +156,10 @@ export function cutCheck({ scans = [], sets = [], proteinAverage = null, protein
       strength,
     };
   }
+
+  // Without a fat reading there is nothing left to judge on — waist was the
+  // fallback and it did not fire, so say that rather than inventing a verdict.
+  if (fatChange === null) return null;
 
   if (holding && !fatFalling) {
     return {

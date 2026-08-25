@@ -28,6 +28,7 @@ export const EXERCISES = [
   { name: 'Box squat to parallel', part: 'legs', muscles: ['quads', 'glutes'], lower: true },
   { name: 'Front squat', part: 'legs', muscles: ['quads'], lower: true },
   { name: 'Leg press', part: 'legs', muscles: ['quads', 'glutes'], lower: true },
+  { name: 'Goblet squat', part: 'legs', muscles: ['quads', 'glutes'], lower: true },
   { name: 'Romanian deadlift', part: 'legs', muscles: ['hamstrings', 'glutes'], lower: true },
   { name: 'Deadlift', part: 'legs', muscles: ['hamstrings', 'glutes', 'back'], lower: true },
   { name: 'Trap-bar deadlift', part: 'legs', muscles: ['quads', 'glutes', 'back'], lower: true },
@@ -43,6 +44,7 @@ export const EXERCISES = [
   // --- chest ---------------------------------------------------------------
   { name: 'Bench press', part: 'chest', muscles: ['chest', 'triceps'] },
   { name: 'Incline bench press', part: 'chest', muscles: ['chest', 'shoulders'] },
+  { name: 'Incline dumbbell press', part: 'chest', muscles: ['chest', 'shoulders'] },
   { name: 'Dumbbell press', part: 'chest', muscles: ['chest', 'triceps'] },
   { name: 'Dumbbell fly', part: 'chest', muscles: ['chest'] },
   { name: 'Cable fly', part: 'chest', muscles: ['chest'] },
@@ -57,6 +59,7 @@ export const EXERCISES = [
   { name: 'Barbell row', part: 'back', muscles: ['back', 'lats'] },
   { name: 'Chest-supported row', part: 'back', muscles: ['back'] },
   { name: 'Seated cable row', part: 'back', muscles: ['back'] },
+  { name: 'One-arm dumbbell row', part: 'back', muscles: ['back'] },
   { name: 'Face pull', part: 'back', muscles: ['rear delts', 'back'] },
   { name: 'Prone Y-T-W', part: 'back', muscles: ['rear delts', 'back'] },
   { name: 'Farmer carry', part: 'back', muscles: ['back', 'core'] },
@@ -73,6 +76,7 @@ export const EXERCISES = [
   // --- arms ----------------------------------------------------------------
   { name: 'Barbell curl', part: 'arms', muscles: ['biceps'] },
   { name: 'Dumbbell curl', part: 'arms', muscles: ['biceps'] },
+  { name: 'Cable curl', part: 'arms', muscles: ['biceps'] },
   { name: 'Hammer curl', part: 'arms', muscles: ['biceps', 'forearms'] },
   { name: 'Triceps pushdown', part: 'arms', muscles: ['triceps'] },
   { name: 'Skull crusher', part: 'arms', muscles: ['triceps'] },

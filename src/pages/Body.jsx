@@ -36,7 +36,13 @@ const FIELDS = [
   { key: 'smi', label: 'SMI', unit: 'kg/m²', step: '0.1' },
   { key: 'inbody_score', label: 'InBody score', unit: '/100', step: '1' },
   { key: 'target_weight_kg', label: 'Target weight', unit: 'kg', step: '0.1' },
+  // Not on the InBody printout — this one comes off a tape measure, and it is
+  // the field the weekly check-in actually exists for.
+  { key: 'waist_cm', label: 'Waist (at the navel)', unit: 'cm', step: '0.5', weekly: true },
 ];
+
+/** The two-field weekly ritual, as opposed to transcribing a scan printout. */
+const WEEKLY_FIELDS = FIELDS.filter((f) => f.key === 'weight_kg' || f.weekly);
 
 const TONE = { good: 'var(--status-excellent)', bad: 'var(--status-poor)', warn: 'var(--status-moderate)', info: 'var(--viz-1)' };
 
@@ -44,14 +50,24 @@ function ScanForm({ open, onClose, onSave, saving }) {
   const [date, setDate] = useState(todayKey());
   const [values, setValues] = useState({});
   const [showAll, setShowAll] = useState(false);
+  /*
+   * Weekly is the default because it is what happens weekly.
+   *
+   * A scan is occasional and a tape measure is every Sunday, so opening
+   * straight into a 20-field printout transcription would put the frequent
+   * task behind the rare one. Both write to the same table — every column is
+   * nullable, so a weight-and-waist row is a valid row, not a partial scan.
+   */
+  const [mode, setMode] = useState('weekly');
+  const weekly = mode === 'weekly';
 
-  const shown = showAll ? FIELDS : FIELDS.filter((f) => f.primary);
+  const shown = weekly ? WEEKLY_FIELDS : showAll ? FIELDS : FIELDS.filter((f) => f.primary);
 
   return (
     <Modal
       open={open}
       onClose={onClose}
-      title="Add an InBody scan"
+      title={weekly ? 'Weekly check-in' : 'Add an InBody scan'}
       size="lg"
       footer={
         <div className="flex gap-2">
@@ -64,13 +80,34 @@ function ScanForm({ open, onClose, onSave, saving }) {
             onClick={() => onSave({ date, ...values })}
             disabled={!values.weight_kg}
           >
-            Save scan
+            {weekly ? 'Save' : 'Save scan'}
           </Button>
         </div>
       }
     >
       <div className="space-y-3">
-        <Field label="Scan date">
+        <div className="grid grid-cols-2 gap-1.5 rounded-xl p-1" style={{ background: 'var(--bg-elevated)' }}>
+          {[
+            { key: 'weekly', label: 'Weekly check-in', hint: 'weight + waist' },
+            { key: 'scan', label: 'InBody scan', hint: 'full printout' },
+          ].map((m) => (
+            <button
+              key={m.key}
+              type="button"
+              onClick={() => setMode(m.key)}
+              className="rounded-lg px-2 py-1.5 text-[11px] leading-tight transition-colors"
+              style={{
+                background: mode === m.key ? 'var(--viz-1)' : 'transparent',
+                color: mode === m.key ? '#fff' : 'var(--text-muted)',
+              }}
+            >
+              <span className="block font-medium">{m.label}</span>
+              <span className="block opacity-80">{m.hint}</span>
+            </button>
+          ))}
+        </div>
+
+        <Field label={weekly ? 'Date' : 'Scan date'}>
           <Input type="date" value={date} onChange={(e) => setDate(e.target.value)} />
         </Field>
 
@@ -89,13 +126,20 @@ function ScanForm({ open, onClose, onSave, saving }) {
           </Field>
         ))}
 
-        <button
-          type="button"
-          onClick={() => setShowAll((v) => !v)}
-          className="muted w-full text-center text-[11px] hover:text-accent"
-        >
-          {showAll ? 'Show fewer fields' : `Show all ${FIELDS.length} fields from the printout`}
-        </button>
+        {weekly ? (
+          <p className="muted text-[11px] leading-relaxed">
+            Measure at the navel, standing relaxed, first thing in the morning. Waist is the
+            indicator that matters most — it moves when the scale is sitting still.
+          </p>
+        ) : (
+          <button
+            type="button"
+            onClick={() => setShowAll((v) => !v)}
+            className="muted w-full text-center text-[11px] hover:text-accent"
+          >
+            {showAll ? 'Show fewer fields' : `Show all ${FIELDS.length} fields from the printout`}
+          </button>
+        )}
       </div>
     </Modal>
   );

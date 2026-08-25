@@ -29,6 +29,50 @@ function windowMean(rows, key, from) {
   return values.length ? { value: mean(values), days: values.length } : null;
 }
 
+const DEFAULT_SLEEP_TARGET = 7.5;
+const DEFAULT_STEP_TARGET = 8000;
+
+/** The three lifts the coach uses as the strength benchmark, plus the hold. */
+const BENCHMARKS = ['Leg press', 'Bench press', 'Lat pulldown', 'Plank'];
+
+/**
+ * Sunday's measurement prompt.
+ *
+ * The programme asks for weight, waist, steps and the benchmark lifts once a
+ * week, and a weekly ritual that depends on remembering it is a weekly ritual
+ * that stops. It only appears on Sundays, and only lists what is actually
+ * missing — a prompt for things already recorded is the fastest way to teach
+ * someone to ignore prompts.
+ *
+ * Photos are deliberately not on this list. The coach asks for them; this app
+ * is publicly readable, so the waist measurement stands in for them.
+ */
+function checkInPrompt({ bodyComposition = [], strengthSets = [] } = {}) {
+  const today = todayKey();
+  if (new Date(`${today}T12:00:00`).getDay() !== 0) return null;
+
+  const since = shiftKey(today, -6);
+  const recent = bodyComposition.filter((r) => r.date >= since);
+  const missing = [];
+
+  if (!recent.some((r) => hasNumber(r.weight_kg))) missing.push('weight');
+  if (!recent.some((r) => hasNumber(r.waist_cm))) missing.push('waist');
+
+  const liftedSince = new Set(
+    strengthSets.filter((r) => r.date >= since).map((r) => String(r.exercise ?? '').toLowerCase())
+  );
+  const notLifted = BENCHMARKS.filter((n) => !liftedSince.has(n.toLowerCase()));
+  if (notLifted.length) missing.push(`${notLifted.join(', ')}`);
+
+  if (!missing.length) return { done: true, missing: [], text: 'Week logged — weight, waist and the benchmark lifts are all in.' };
+
+  return {
+    done: false,
+    missing,
+    text: `Sunday check-in. Still to record this week: ${missing.join('; ')}.`,
+  };
+}
+
 export function weeklyReview({
   scores = [],
   health = [],
@@ -50,6 +94,18 @@ export function weeklyReview({
     readiness && prevReadiness.length ? Math.round(readiness.value - mean(prevReadiness)) : null;
 
   const sleepAvg = windowMean(sleep, 'duration_hours', from);
+  const stepAvg = windowMean(health, 'steps', from);
+
+  /*
+   * Targets the coach set, with his numbers as the fallback.
+   *
+   * Sleep and steps were both already tracked and neither had anything to hit,
+   * which makes a chart out of something that should be a verdict. The
+   * fallbacks are the middle of his ranges (7.5-8 h, 7-10k) so these read
+   * correctly whether or not the profile columns have been filled in.
+   */
+  const sleepGoal = toNumber(profile?.sleep_target_hours) ?? DEFAULT_SLEEP_TARGET;
+  const stepGoal = toNumber(profile?.step_target) ?? DEFAULT_STEP_TARGET;
   const target = proteinTarget({ profile, latestScan: latestScan(bodyComposition) });
   const protein = proteinSummary(meals, target.grams, DAYS);
   const volume = weeklyVolume(strengthSets, DAYS);
@@ -97,12 +153,17 @@ export function weeklyReview({
         text: `Readiness fell ${Math.abs(readinessDelta)} points against last week. Something is accumulating — look at sleep before you look at the programme.`,
       },
     sleepAvg &&
-      sleepAvg.value < 6.5 && {
+      sleepAvg.value < sleepGoal - 0.75 && {
         priority: 5,
-        text: `Sleep averaged ${sleepAvg.value.toFixed(1)}h. Your own data says duration does not move your HRV much, so this is not about tomorrow's score — it is about the deficit being survivable.`,
+        text: `Sleep averaged ${sleepAvg.value.toFixed(1)}h against a ${sleepGoal}h target. Your own data says duration does not move your HRV much, so this is not about tomorrow's score — it is about the deficit being survivable, and it is the single biggest thing on this page you can change.`,
       },
-    protein.loggedDays < 4 && {
-      priority: 6,
+    stepAvg &&
+      stepAvg.value < stepGoal * 0.75 && {
+        priority: 6,
+        text: `Steps averaged ${Math.round(stepAvg.value).toLocaleString()} a day against ${stepGoal.toLocaleString()}. That gap is roughly ${Math.round((stepGoal - stepAvg.value) * 0.04)} kcal a day of the deficit you are otherwise trying to find in food.`,
+      },
+    protein.loggedDays < 7 && {
+      priority: 7,
       text: `Only ${protein.loggedDays} of ${DAYS} days had food logged, so the protein figure above is thin. A few more days makes it worth acting on.`,
     },
     { priority: 9, text: 'Nothing obviously needs changing. Keep doing what you did.' },
@@ -114,7 +175,12 @@ export function weeklyReview({
     from,
     to: todayKey(),
     readiness: readiness ? { value: Math.round(readiness.value), days: readiness.days, delta: readinessDelta } : null,
-    sleep: sleepAvg ? { value: Math.round(sleepAvg.value * 10) / 10, days: sleepAvg.days } : null,
+    sleep: sleepAvg
+      ? { value: Math.round(sleepAvg.value * 10) / 10, days: sleepAvg.days, target: sleepGoal }
+      : null,
+    steps: stepAvg
+      ? { value: Math.round(stepAvg.value), days: stepAvg.days, target: stepGoal }
+      : null,
     protein: { ...protein, target: target.grams },
     volume,
     sessions: sessions.length,
@@ -122,6 +188,7 @@ export function weeklyReview({
     strengthSets: strengthSets.filter((s) => s.date >= from && !s.is_warmup).length,
     cut,
     focus: focus.text,
+    checkIn: checkInPrompt({ bodyComposition, strengthSets }),
     // Said plainly so a thin week is never mistaken for a good one.
     coverage: {
       scored: readiness?.days ?? 0,

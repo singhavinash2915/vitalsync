@@ -109,6 +109,16 @@ export const BODY_METRICS = [
     why: 'Blunt by design — it cannot tell muscle from fat, so a muscular person reads "overweight". Treat the body-fat percentage above as the real answer.',
   },
   {
+    key: 'waist_cm',
+    label: 'Waist',
+    unit: 'cm',
+    group: 'risk',
+    range: [80, 94],
+    better: 'lower',
+    what: 'Measured at the navel with a tape, standing relaxed, first thing in the morning.',
+    why: 'The one number here that does not come off a machine, and the one your coach asks for weekly. It tracks abdominal fat directly, and it keeps moving through the weeks when the scale sits flat because muscle is replacing fat at a similar weight.',
+  },
+  {
     key: 'visceral_fat_level',
     label: 'Visceral fat level',
     unit: '',

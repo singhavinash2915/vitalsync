@@ -59,6 +59,34 @@ export function bodyTrend(scans = []) {
       ? (fatChange / weightChange) * 100
       : null;
 
+  /*
+   * Waist is computed over its own rows rather than off `first` and `last`.
+   *
+   * The two series do not line up: InBody scans are occasional and carry no
+   * tape measurement, while the weekly quick entries carry waist and weight
+   * and nothing else. Taking `last.waist_cm - first.waist_cm` would return
+   * null on exactly the history this person has.
+   */
+  const waistRows = rows.filter((r) => hasNumber(r.waist_cm));
+  const waist =
+    waistRows.length >= 2
+      ? (() => {
+          const a = waistRows[0];
+          const b = waistRows[waistRows.length - 1];
+          const w = weeksBetween(a.date, b.date);
+          const change = toNumber(b.waist_cm) - toNumber(a.waist_cm);
+          return {
+            readings: waistRows.length,
+            from: a.date,
+            to: b.date,
+            weeks: Number(w.toFixed(1)),
+            change,
+            perWeek: w > 0 ? change / w : null,
+            falling: change < -0.5,
+          };
+        })()
+      : null;
+
   const losingLean = (muscleChange ?? leanChange ?? 0) < -0.4;
   const perWeek = weightChange === null ? null : weightChange / weeks;
 
@@ -72,6 +100,7 @@ export function bodyTrend(scans = []) {
     muscleChange,
     leanChange,
     fatShare,
+    waist,
     perWeek,
     losingLean,
     tooFast: perWeek !== null && perWeek < -KG_PER_WEEK_SAFE,
