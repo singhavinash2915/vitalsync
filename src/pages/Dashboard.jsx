@@ -18,13 +18,13 @@ import {
 import { useAuthStore } from '../store/useAuthStore';
 import { useDataStore } from '../store/useDataStore';
 import { computeDailyScores, scoreColor, scoreLabel, exertionLabel } from '../lib/scores';
-import { buildInsights, weeklySummary, personalRecords } from '../lib/insights';
+import { buildInsights, personalRecords } from '../lib/insights';
 import { heroAdvice } from '../lib/training';
 import { detectIllnessSignal } from '../lib/illness';
 import { todayKey, prettyDateLong, formatHours } from '../lib/dates';
 import { ScoreRing } from '../components/ScoreRing';
 import { Card, CardHeader, CardBody, Button, Skeleton, EmptyState, Badge } from '../components/ui';
-import { InsightsList, WeeklySummaryCard, PersonalRecordsCard } from '../components/InsightsPanel';
+import { InsightsList, PersonalRecordsCard } from '../components/InsightsPanel';
 import DiscoveredFindingsCard from '../components/DiscoveredFindingsCard';
 import QuickLog from '../components/QuickLog';
 import WeeklyReview from '../components/WeeklyReview';
@@ -158,10 +158,6 @@ export default function Dashboard() {
     [dayHealth, history, daySleep, sleepHistory, workoutLogs, date]
   );
 
-  const summary = useMemo(
-    () => weeklySummary([...scores].sort((a, b) => (a.date > b.date ? 1 : -1))),
-    [scores]
-  );
 
   const records = useMemo(
     () => personalRecords({ health, sleep: sleepLogs, workouts: workoutLogs, scores }),
@@ -465,7 +461,6 @@ export default function Dashboard() {
       <WeeklyReview />
       <BodyCard />
       <DiscoveredFindingsCard />
-      <WeeklySummaryCard summary={summary} />
       <PersonalRecordsCard records={records} />
 
       {/* ---------------- Quick actions ---------------- */}
