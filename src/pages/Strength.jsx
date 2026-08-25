@@ -26,6 +26,17 @@ import { todayKey, prettyDate, relativeDay } from '../lib/dates';
 import EditGate, { useCanEdit } from '../components/EditGate';
 import { Card, CardHeader, CardBody, Button, Input, Field, Modal, Badge } from '../components/ui';
 
+/**
+ * The three answers people will actually give, mapped onto the RPE scale the
+ * progression logic already speaks. 6 earns weight, 8 holds and chases a rep,
+ * 9.5 backs off — the thresholds in suggestNextLoad, unchanged.
+ */
+const RPE_CHOICES = [
+  { value: 6, label: 'Easy', hint: 'reps left over', color: 'var(--status-excellent)' },
+  { value: 8, label: 'Right', hint: 'hard but clean', color: 'var(--status-good)' },
+  { value: 9.5, label: 'Grind', hint: 'barely finished', color: 'var(--status-moderate)' },
+];
+
 /** Pulls the movement names out of a prescribed session's Main/Support blocks. */
 function plannedLifts(session) {
   if (!session?.blocks) return [];
@@ -205,8 +216,36 @@ function SetForm({ open, onClose, onSave, exercise, lastSession, suggestion }) {
             <Input type="number" inputMode="numeric" value={reps} onChange={(e) => setReps(e.target.value)} />
           </Field>
         </div>
-        <Field label="RPE" hint="optional — how hard it felt, 1 to 10">
-          <Input type="number" inputMode="decimal" step="0.5" value={rpe} onChange={(e) => setRpe(e.target.value)} />
+        {/*
+          Three buttons rather than a number field.
+          Seven sets had been logged and not one carried an RPE — which is not
+          indiscipline, it is that "rate this 1 to 10" is a question nobody
+          wants to answer on a number keypad between sets. Without it the load
+          suggestion, the stall detector and the deload advice all sit idle,
+          because every one of them reads effort rather than the calendar.
+        */}
+        <Field label="How did that feel?" hint="Decides what goes on the bar next time">
+          <div className="grid grid-cols-3 gap-2">
+            {RPE_CHOICES.map((c) => {
+              const active = String(rpe) === String(c.value);
+              return (
+                <button
+                  key={c.value}
+                  type="button"
+                  onClick={() => setRpe(active ? '' : String(c.value))}
+                  className="rounded-xl border px-2 py-2.5 text-center transition-colors"
+                  style={{
+                    borderColor: active ? c.color : 'var(--border)',
+                    background: active ? `color-mix(in srgb, ${c.color} 14%, transparent)` : 'transparent',
+                    color: active ? c.color : undefined,
+                  }}
+                >
+                  <span className="block text-xs font-semibold">{c.label}</span>
+                  <span className="muted block text-[10px]">{c.hint}</span>
+                </button>
+              );
+            })}
+          </div>
         </Field>
       </div>
     </Modal>

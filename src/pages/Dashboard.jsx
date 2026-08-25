@@ -27,6 +27,7 @@ import { Card, CardHeader, CardBody, Button, Skeleton, EmptyState, Badge } from 
 import { InsightsList, WeeklySummaryCard, PersonalRecordsCard } from '../components/InsightsPanel';
 import DiscoveredFindingsCard from '../components/DiscoveredFindingsCard';
 import QuickLog from '../components/QuickLog';
+import WeeklyReview from '../components/WeeklyReview';
 import RecoveryTrend from '../components/viz/RecoveryTrend';
 import ContributorBars from '../components/viz/ContributorBars';
 import { seriesColor } from '../lib/viz';
@@ -461,6 +462,7 @@ export default function Dashboard() {
       ) : null}
 
       <InsightsList insights={insights} />
+      <WeeklyReview />
       <BodyCard />
       <DiscoveredFindingsCard />
       <WeeklySummaryCard summary={summary} />
